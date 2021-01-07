@@ -72,3 +72,6 @@ def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -
             return string
 
     return string
+
+def align_int(num: int, alignment: int) -> int:
+    return (num + (alignment - 1)) & -alignment

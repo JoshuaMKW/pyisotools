@@ -1,9 +1,13 @@
+import json
+import os
+
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
 from apploader import Apploader
 from bi2 import BI2
+from bnrparser import BNR
 from boot import Boot
 from dolreader import DolFile
 from fst import FST, FSTNode, FSTRoot
@@ -16,8 +20,7 @@ class FileSystemTooLargeError(Exception):
 class ISOBase(FST):
 
     def __init__(self, root: Path):
-        super().__init__()
-        self.root = root
+        super().__init__(root)
         self.bootheader = None
         self.bootinfo = None
         self.apploader = None
@@ -33,7 +36,7 @@ class ISOBase(FST):
         iso.seek(_fstloc)
 
         self.fst = BytesIO(iso.read(_fstsize))
-        return FST().load(self.fst)
+        return self.load(self.fst)
 
 class WiiISO(ISOBase):
 
@@ -49,6 +52,7 @@ class GamecubeISO(ISOBase):
 
     def __init__(self, root: Path):
         super().__init__(root)
+        self.bnr = None
 
     def build(self, dest: Path, genNewInfo: bool = False):
         def _init_sys(self, genNewInfo: bool):
@@ -64,8 +68,22 @@ class GamecubeISO(ISOBase):
             with (systemPath / "apploader.img").open("rb") as f:
                 self.apploader = Apploader(f)
 
+            self.bnr = BNR((self.root / "opening.bnr"))
+
+            with (systemPath / ".config.json").open("r") as f:
+                config = json.load(f)
+
             if genNewInfo:
-                self.bootheader.version = 69
+                self.bnr.gameName = config["name"]
+                self.bnr.gameTitle = config["name"]
+                self.bootheader.gameName = config["name"]
+                self.bootheader.gameCode = config["gameid"][:4]
+                self.bootheader.makerCode = config["gameid"][:2]
+                self.bootheader.version = config["version"]
+                self.bnr.developerName = config["author"]
+                self.bnr.developerTitle = config["author"]
+                self.bnr.gameDescription = config["description"]
+
                 self.apploader.buildDate = datetime.today().strftime("%Y/%m/%d") 
 
             self.bootheader.dolOffset = (0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
@@ -96,24 +114,31 @@ class GamecubeISO(ISOBase):
                     ISO.write(child.path.read_bytes())
 
     def extract(self, iso: Path, dest: Path):
-        def _init_sys(self, iso) -> FSTNode:
+        def _init_sys(self, iso):
             iso.seek(0)
             self.bootheader = Boot(iso)
             self.bootinfo = BI2(iso)
             self.apploader = Apploader(iso)
             self.dol = DolFile(iso, self.bootheader.dolOffset)
-            fst = self.get_fst(iso)
+            self.get_fst(iso)
 
-            return fst
+            bnrNode = self.find_by_path(self.root / "opening.bnr")
+            iso.seek(bnrNode._fileoffset)
+            self.bnr = BNR(iso)
+
 
         systemPath = dest / self.root / "sys"
         dest.mkdir(parents=True, exist_ok=True)
-        systemPath.mkdir(exist_ok=True)
-
+        systemPath.mkdir(parents=True, exist_ok=True)
 
         with iso.open("rb") as _iso:
-            fst = _init_sys(self, _iso)
+            _init_sys(self, _iso)
 
+            prev = FSTNode("fst.bin", FSTNode.FILE, None, self.bootheader.fstSize, self.bootheader.fstOffset)
+            for node in self.nodes_by_offset():
+                self._alignmentTable["files"][str(node.path).replace(os.sep, '/')] = self._detect_alignment(node, prev)
+                prev = node
+                
             with (systemPath / "boot.bin").open("wb") as f:
                 self.bootheader.save(f)
 
@@ -130,8 +155,17 @@ class GamecubeISO(ISOBase):
             with (systemPath / "fst.bin").open("wb") as f:
                 f.write(self.fst.getvalue())
                 f.write(b"\x00" * ((f.tell() + 3) & -4))
+
+            with (systemPath / ".config.json").open("w") as f:
+                config = { "name": self.bootheader.gameName,
+                           "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
+                           "version": self.bootheader.version,
+                           "author": self.bnr.developerTitle,
+                           "description": self.bnr.gameDescription,
+                           "alignment": self._alignmentTable }
+                json.dump(config, f, indent=4)
             
-            for root, _, filenodes in fst.walk():
+            for root, _, filenodes in self.walk():
                 if not root.exists():
                     root.mkdir()
                 
@@ -143,4 +177,4 @@ class GamecubeISO(ISOBase):
 
 if __name__ == "__main__":
     iso = GamecubeISO(Path("root"))
-    iso.extract(Path("test.iso"), Path("extractedtest/"))
+    iso.extract(Path(r"C:\Users\Kyler-Josh\3D Objects\Dolphin\Dolphin-Games\Super Mario Sunshine [GMSE01].iso"), Path("extractedtest/"))

@@ -4,9 +4,10 @@ import json
 import os
 import sys
 import time
+from fnmatch import fnmatch
 from pathlib import Path
 
-from iohelper import read_string, read_ubyte, read_uint32, write_uint32
+from iohelper import align_int, read_string, read_ubyte, read_uint32, write_uint32
 
 
 class FileAccessOnFolderError(Exception):
@@ -33,11 +34,11 @@ class FSTNode(object):
     def __init__(self, name: str, nodetype: int = None, nodeid: int = None, filesize: int = None, fileoffset: int = None, parentnode: int = None, nextnode: int = None):
         self.name = name
         self.type = nodetype
+        self.priority = 31
 
         # file attributes
         self._filesize = filesize
         self._fileoffset = fileoffset
-        self.data = None
 
         # folder attributes
         self.dirparent = parentnode
@@ -78,7 +79,7 @@ class FSTNode(object):
                 child.size = entry.stat().st_size
                 if parentnode is not None:
                     parentnode.add_child(child)
-            elif entry.is_dir(): 
+            elif entry.is_dir():
                 child = FSTNode.folder(entry.name)
                 self.rcreate(entry, child, ignorePath=ignorePath)
                 if parentnode is not None:
@@ -223,16 +224,38 @@ class FSTRoot(FSTNode):
     def __len__(self):
         return self.entryCount
 
+    def find_by_path(self, path: Path) -> FSTNode:
+        for node in self.rfiles:
+            if node.path == path:
+                return node
+
+    def nodes_by_offset(self, reverse: bool = False) -> FSTNode:
+        filenodes = [node for node in self.rfiles]
+
+        for node in sorted(filenodes, key=lambda x: x._fileoffset, reverse=reverse):
+            yield node
+
+    def nodes_by_priority(self, reverse: bool = False) -> FSTNode:
+        filenodes = [node for node in self.rfiles]
+
+        for node in sorted(filenodes, key=lambda x: x.priority, reverse=reverse):
+            yield node
 
 class FST(FSTRoot):
-    def __init__(self):
+    # ---------------------------------------------------------------------- #
+    #  TODO: Implement custom file alignment,                                #
+    #        Inject custom game id and version                               #
+    # ---------------------------------------------------------------------- #
+
+    def __init__(self, root: Path):
         super().__init__()
+        self.root = root
         self._curEntry = 0
         self._strOfs = 0
         self._dataOfs = 0
+        self._prevfile = None
 
         self._alignmentTable = {}
-        self._init_alignment_table()
 
     def __repr__(self):
         return f"FST Object <{self.entryCount} entries>"
@@ -240,36 +263,6 @@ class FST(FSTRoot):
     @property
     def strTableOfs(self):
         return len(self) * 0xC
-
-    def save(self, fst, startpos: int = 0):
-        self.entryCount, _ = self._get_node_info(self, 0, 0)
-
-        fst.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
-        write_uint32(fst, self.entryCount)
-
-        self._dataOfs = startpos
-        self._curEntry = 1
-        self._strOfs = 0
-        for child in self.children:
-            self._write_nodes(fst, child)
-        fst.write(b"\x00" * ((fst.tell() + 3) & -4))
-
-    def load(self, fst) -> FSTNode:
-        if fst.read(1) != b"\x01":
-            raise InvalidFSTError("Invalid Root flag found")
-        elif fst.read(3) != b"\x00\x00\x00":
-            raise InvalidFSTError("Invalid Root string offset found")
-        elif fst.read(4) != b"\x00\x00\x00\x00":
-            raise InvalidFSTError("Invalid Root offset found")
-
-        self.entryCount = read_uint32(fst)
-
-        self._curEntry = 1
-        while self._curEntry < self.entryCount:
-            child = self._read_nodes(fst, FSTNode.empty())
-            self.add_child(child)
-        
-        return self
 
     def print_info(self, fst=None):
         def print_tree(node: FSTNode, string: str, depth: int) -> str:
@@ -295,6 +288,40 @@ class FST(FSTRoot):
             string = print_tree(child, string, 0)
 
         print(string)
+
+    def load(self, fst) -> FSTNode:
+        if fst.read(1) != b"\x01":
+            raise InvalidFSTError("Invalid Root flag found")
+        elif fst.read(3) != b"\x00\x00\x00":
+            raise InvalidFSTError("Invalid Root string offset found")
+        elif fst.read(4) != b"\x00\x00\x00\x00":
+            raise InvalidFSTError("Invalid Root offset found")
+
+        self._alignmentTable = {"default": 4, "files": {}}
+        self.entryCount = read_uint32(fst)
+
+        self._curEntry = 1
+        while self._curEntry < self.entryCount:
+            child = self._read_nodes(fst, FSTNode.empty())
+            self.add_child(child)
+
+        return self
+
+    def save(self, fst, startpos: int = 0):
+        self._init_alignment_table(self.root / ".config.json")
+        self.entryCount, _ = self._get_node_info(self, 0, 0)
+
+        fst.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
+        write_uint32(fst, self.entryCount)
+
+        self._curEntry = 1
+        self._strOfs = 0
+        for child in self.children:
+            align = self._get_alignment(child.path)
+            self._dataOfs = align_int(startpos, align)
+            self._write_nodes(fst, child)
+
+        fst.write(b"\x00" * ((fst.tell() + 3) & -4))
 
     def _read_nodes(self, fst, node: FSTNode) -> (FSTNode, int):
         _type = read_ubyte(fst)
@@ -324,11 +351,12 @@ class FST(FSTRoot):
         return node
 
     def _write_nodes(self, fst, node: FSTNode):
-        self._dataOfs = (self._dataOfs + 0x7FF) & -0x800
+        align = self._get_alignment(node.path)
+        self._dataOfs = align_int(self._dataOfs, align)
         if node.is_file():
             if node._fileoffset == None:
                 node._fileoffset = self._dataOfs
-        
+
         node._id = self._curEntry
 
         totalChildren, _ = self._get_node_info(node, 0, 0)
@@ -353,15 +381,52 @@ class FST(FSTRoot):
         for child in node.children:
             self._write_nodes(fst, child)
 
-    def _init_alignment_table(self, configPath: Path = Path("alignment.json")):
+    def _init_alignment_table(self, configPath: Path):
         with configPath.open("r") as config:
             data = json.load(config)
 
-        self._alignmentTable = data
+        self._alignmentTable = data["alignment"]
 
+    def _get_alignment(self, path: [Path, str]) -> int:
+        if self._alignmentTable:
+            for _set in self._alignmentTable["files"]:
+                glob = list(_set.keys())[0]
+                if fnmatch(str(path).replace(os.sep, '/').lower(), glob.strip().lower()):
+                    return _set[glob]
+            return self._alignmentTable["default"]
+        return 4
 
-if __name__ == "__main__":
-    fst = FST()
+    def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
 
-    with open(sys.argv[1], "rb") as _fstbin:
-        fst.print_info(_fstbin)
+        if prev:
+            offset = node._fileoffset - (prev._fileoffset + prev.size)
+        else:
+            offset = node._fileoffset
+
+        if offset == 0:
+            return 4
+
+        alignment = 4
+        mask = 0x7FFF
+        for _ in range(13):
+            if (node._fileoffset & mask) == 0:
+                alignment = mask + 1
+                break
+            mask >>= 1
+
+        mask = 0x7FFF
+        found = False
+        for _ in range(13):
+            if (offset & mask) == 0:
+                if mask + 1 <= alignment:
+                    alignment = mask + 1
+                    found = True
+                    break
+                else:
+                    found = True
+                    break
+            mask >>= 1
+        
+        if not found:
+            return 4
+        return alignment

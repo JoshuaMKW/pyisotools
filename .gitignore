@@ -133,4 +133,4 @@ root/
 *.iso
 
 # test files
-alignment.json
+.config.json
