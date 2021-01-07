@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# ISOs
+root/
+*.iso
+
+# test files
+alignment.json
