@@ -34,7 +34,6 @@ class FSTNode(object):
     def __init__(self, name: str, nodetype: int = None, nodeid: int = None, filesize: int = None, fileoffset: int = None, parentnode: int = None, nextnode: int = None):
         self.name = name
         self.type = nodetype
-        self.priority = 31
 
         # file attributes
         self._filesize = filesize
@@ -235,12 +234,6 @@ class FSTRoot(FSTNode):
         for node in sorted(filenodes, key=lambda x: x._fileoffset, reverse=reverse):
             yield node
 
-    def nodes_by_priority(self, reverse: bool = False) -> FSTNode:
-        filenodes = [node for node in self.rfiles]
-
-        for node in sorted(filenodes, key=lambda x: x.priority, reverse=reverse):
-            yield node
-
 class FST(FSTRoot):
     # ---------------------------------------------------------------------- #
     #  TODO: Implement custom file alignment,                                #
@@ -297,7 +290,7 @@ class FST(FSTRoot):
         elif fst.read(4) != b"\x00\x00\x00\x00":
             raise InvalidFSTError("Invalid Root offset found")
 
-        self._alignmentTable = {"default": 4, "files": {}}
+        self._alignmentTable = {}
         self.entryCount = read_uint32(fst)
 
         self._curEntry = 1
@@ -389,15 +382,12 @@ class FST(FSTRoot):
 
     def _get_alignment(self, path: [Path, str]) -> int:
         if self._alignmentTable:
-            for _set in self._alignmentTable["files"]:
-                glob = list(_set.keys())[0]
-                if fnmatch(str(path).replace(os.sep, '/').lower(), glob.strip().lower()):
-                    return _set[glob]
-            return self._alignmentTable["default"]
+            for entry in self._alignmentTable:
+                if fnmatch(str(path).replace(os.sep, '/').lower(), entry.strip().lower()):
+                    return self._alignmentTable[entry]
         return 4
 
     def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
-
         if prev:
             offset = node._fileoffset - (prev._fileoffset + prev.size)
         else:

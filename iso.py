@@ -89,7 +89,7 @@ class GamecubeISO(ISOBase):
             self.bootheader.dolOffset = (0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
             self.bootheader.fstOffset = (self.bootheader.dolOffset + len(self.dol.getbuffer()) + 0x7FF) & -0x800
 
-            self.rcreate(self.root, self, ignorePath=(Path("root/sys"),))
+            self.rcreate(self.root, self, ignorePath=(self.root / "sys",))
             self.save(self.fst, self.MaxSize - self.datasize)
 
             self.bootheader.fstSize = len(self.fst.getbuffer())
@@ -177,4 +177,5 @@ class GamecubeISO(ISOBase):
 
 if __name__ == "__main__":
     iso = GamecubeISO(Path("root"))
-    iso.extract(Path(r"C:\Users\Kyler-Josh\3D Objects\Dolphin\Dolphin-Games\Super Mario Sunshine [GMSE01].iso"), Path("extractedtest/"))
+    iso.extract(Path(r"C:\Users\Kyler-Josh\3D Objects\Dolphin\Dolphin-Games\Super Mario Sunshine [GMSE01].iso"), Path().cwd())
+    iso.build(Path("test.iso"), genNewInfo=True)
