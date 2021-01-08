@@ -272,9 +272,9 @@ class FSTRoot(FSTNode):
 
 class FST(FSTRoot):
 
-    def __init__(self, root: Path):
+    def __init__(self):
         super().__init__()
-        self.root = root
+        self.root = None
         self._curEntry = 0
         self._strOfs = 0
         self._dataOfs = 0

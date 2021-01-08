@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 
 from datetime import datetime
 from io import BytesIO
@@ -20,8 +19,8 @@ class FileSystemTooLargeError(Exception):
 
 class ISOBase(FST):
 
-    def __init__(self, root: Path):
-        super().__init__(root)
+    def __init__(self):
+        super().__init__()
         self.bootheader = None
         self.bootinfo = None
         self.apploader = None
@@ -43,19 +42,20 @@ class WiiISO(ISOBase):
 
     MaxSize = 4699979776
 
-    def __init__(self, root: Path):
-        super().__init__(root)
+    def __init__(self):
+        super().__init__()
 
 
 class GamecubeISO(ISOBase):
 
     MaxSize = 1459978240
 
-    def __init__(self, root: Path):
-        super().__init__(root)
+    def __init__(self):
+        super().__init__()
         self.bnr = None
 
-    def build(self, dest: Path, genNewInfo: bool = False):
+    def build(self, root: Path, dest: [Path, str] = None, genNewInfo: bool = False):
+        
         def _init_sys(self, genNewInfo: bool):
             systemPath = self.root / "sys"
             self.dol = BytesIO((systemPath / "main.dol").read_bytes())
@@ -99,7 +99,18 @@ class GamecubeISO(ISOBase):
             if ((self.bootheader.fstOffset + self.bootheader.fstSize + 0x7FF) & -0x800) + self.datasize > self.MaxSize:
                 raise FileSystemTooLargeError(f"{((self.bootheader.fstOffset + self.bootheader.fstSize + 0x7FF) & -0x800) + self.datasize} is larger than the max size of a GCM ({self.MaxSize})")
 
+        self.root = root
         _init_sys(self, genNewInfo)
+
+        if dest is None:
+            dest = Path(f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}].iso").resolve()
+        else:
+            fmtpath = str(dest).replace(r"%fullname%", f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}]")
+            fmtpath = fmtpath.replace(r"%name%", self.bootheader.gameName)
+            fmtpath = fmtpath.replace(r"%gameid%", f"{self.bootheader.gameCode}{self.bootheader.makerCode}")
+            dest = Path(fmtpath)
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
 
         with dest.open("wb") as ISO:
             self.bootheader.save(ISO)
@@ -115,7 +126,8 @@ class GamecubeISO(ISOBase):
                     ISO.write(child.path.read_bytes())
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
 
-    def extract(self, iso: Path, dest: Path):
+    def extract(self, iso: Path, dest: [Path, str] = None):
+
         def _init_sys(self, iso):
             iso.seek(0)
             self.bootheader = Boot(iso)
@@ -124,14 +136,18 @@ class GamecubeISO(ISOBase):
             self.dol = DolFile(iso, self.bootheader.dolOffset)
             self.get_fst(iso)
 
-            bnrNode = self.find_by_path(self.root / "opening.bnr")
+            bnrNode = self.find_by_path(Path(self.root.name, "opening.bnr"))
             iso.seek(bnrNode._fileoffset)
             self.bnr = BNR(iso)
 
+        if dest is None:
+            self.root = Path("root").resolve()
+        else:
+            self.root = Path(dest, "root")
 
-        systemPath = dest / self.root / "sys"
-        dest.mkdir(parents=True, exist_ok=True)
-        systemPath.mkdir(parents=True, exist_ok=True)
+        systemPath = self.root / "sys"
+        self.root.mkdir(parents=True, exist_ok=True)
+        systemPath.mkdir(exist_ok=True)
 
         with iso.open("rb") as _iso:
             _init_sys(self, _iso)
@@ -170,12 +186,7 @@ class GamecubeISO(ISOBase):
                     root.mkdir()
                 
                 for node in filenodes:
-                    (dest / root).mkdir(parents=True, exist_ok=True)
-                    with (dest / root / node.name).open("wb") as f:
+                    (self.root.parent / root).mkdir(parents=True, exist_ok=True)
+                    with (self.root.parent / root / node.name).open("wb") as f:
                         _iso.seek(node._fileoffset)
                         f.write(_iso.read(node.size))
-
-if __name__ == "__main__":
-    iso = GamecubeISO(Path("root"))
-    #iso.extract(Path("game.iso"), Path().cwd())
-    iso.build(Path("test.iso"), genNewInfo=True)
