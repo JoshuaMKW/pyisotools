@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 from datetime import datetime
 from io import BytesIO
@@ -78,19 +79,19 @@ class GamecubeISO(ISOBase):
                 self.bnr.gameTitle = config["name"]
                 self.bootheader.gameName = config["name"]
                 self.bootheader.gameCode = config["gameid"][:4]
-                self.bootheader.makerCode = config["gameid"][:2]
+                self.bootheader.makerCode = config["gameid"][4:6]
                 self.bootheader.version = config["version"]
                 self.bnr.developerName = config["author"]
                 self.bnr.developerTitle = config["author"]
                 self.bnr.gameDescription = config["description"]
-
                 self.apploader.buildDate = datetime.today().strftime("%Y/%m/%d") 
 
             self.bootheader.dolOffset = (0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
             self.bootheader.fstOffset = (self.bootheader.dolOffset + len(self.dol.getbuffer()) + 0x7FF) & -0x800
 
+            self.fst = BytesIO()
             self.rcreate(self.root, self, ignorePath=(self.root / "sys",))
-            self.save(self.fst, self.MaxSize - self.datasize)
+            self.save(self.fst, (self.MaxSize - self.datasize) & -32768)
 
             self.bootheader.fstSize = len(self.fst.getbuffer())
             self.bootheader.fstMaxSize = self.bootheader.fstSize
@@ -112,6 +113,7 @@ class GamecubeISO(ISOBase):
                 if child.is_file():
                     ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
                     ISO.write(child.path.read_bytes())
+            ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
 
     def extract(self, iso: Path, dest: Path):
         def _init_sys(self, iso):
@@ -136,7 +138,7 @@ class GamecubeISO(ISOBase):
 
             prev = FSTNode("fst.bin", FSTNode.FILE, None, self.bootheader.fstSize, self.bootheader.fstOffset)
             for node in self.nodes_by_offset():
-                self._alignmentTable["files"][str(node.path).replace(os.sep, '/')] = self._detect_alignment(node, prev)
+                self._alignmentTable[str(node.path).replace(os.sep, '/')] = self._detect_alignment(node, prev)
                 prev = node
                 
             with (systemPath / "boot.bin").open("wb") as f:
@@ -147,14 +149,12 @@ class GamecubeISO(ISOBase):
 
             with (systemPath / "apploader.img").open("wb") as f:
                 self.apploader.save(f)
-                f.write(b"\x00" * ((f.tell() + 3) & -4))
 
             with (systemPath / "main.dol").open("wb") as f:
                 self.dol.save(f)
 
             with (systemPath / "fst.bin").open("wb") as f:
                 f.write(self.fst.getvalue())
-                f.write(b"\x00" * ((f.tell() + 3) & -4))
 
             with (systemPath / ".config.json").open("w") as f:
                 config = { "name": self.bootheader.gameName,
@@ -177,5 +177,5 @@ class GamecubeISO(ISOBase):
 
 if __name__ == "__main__":
     iso = GamecubeISO(Path("root"))
-    iso.extract(Path(r"C:\Users\Kyler-Josh\3D Objects\Dolphin\Dolphin-Games\Super Mario Sunshine [GMSE01].iso"), Path().cwd())
+    #iso.extract(Path("game.iso"), Path().cwd())
     iso.build(Path("test.iso"), genNewInfo=True)

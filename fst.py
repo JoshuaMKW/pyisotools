@@ -40,12 +40,12 @@ class FSTNode(object):
         self._fileoffset = fileoffset
 
         # folder attributes
-        self.dirparent = parentnode
-        self.dirnext = nextnode
+        self._dirparent = parentnode
+        self._dirnext = nextnode
 
         self._children = {}
+        self._alignment = 4
         self._parent = None
-        self._datasize = 0
         self._id = None
 
     def __repr__(self):
@@ -63,28 +63,6 @@ class FSTNode(object):
     def empty(cls):
         return cls("")
 
-    def rcreate(self, path: Path, parentnode: FSTNode = None, ignorePath=()):
-        for entry in path.iterdir():
-            skip = False
-            for p in ignorePath:
-                if entry == p:
-                    skip = True
-                    break
-            if skip:
-                continue
-
-            if entry.is_file():
-                child = FSTNode.file(entry.name)
-                child.size = entry.stat().st_size
-                if parentnode is not None:
-                    parentnode.add_child(child)
-            elif entry.is_dir():
-                child = FSTNode.folder(entry.name)
-                self.rcreate(entry, child, ignorePath=ignorePath)
-                if parentnode is not None:
-                    parentnode.add_child(child)
-            else:
-                raise InvalidEntryError("Not a dir or file")
 
     @property
     def path(self) -> Path:
@@ -143,20 +121,29 @@ class FSTNode(object):
             yield child
 
     @property
+    def rootnode(self) -> FSTRoot:
+        prev = self
+        parent = self.parent
+        while parent is not None:
+            prev = parent
+            parent = parent.parent
+        return prev
+
+    @property
     def size(self) -> int:
         if self.is_file():
             return self._filesize
         else:
             return self._get_node_info(self, 0, 0)[0]
 
+    @property
+    def datasize(self) -> int:
+        return self._collect_size(0)
+
     @size.setter
     def size(self, size: int):
         if self.is_file():
             self._filesize = size
-
-    @property
-    def datasize(self) -> int:
-        return self._collect_size(0)
 
     def walk(self, topdown: bool = True):
         dirs, files = [], []
@@ -190,25 +177,34 @@ class FSTNode(object):
     def is_root(self) -> bool:
         return self.type == FSTNode.FOLDER and self.name == "root" and self.parent == None
 
+    def _collect_size(self, size: int) -> int:
+        for node in self.children:
+            if node.is_file():
+                alignment = self._get_alignment(node.path)
+                size = align_int(size, alignment)
+                size += node.size
+
+            size = node._collect_size(size)
+
+        return align_int(size, 4)
+
+    def _get_alignment(self, path: [Path, str]) -> int:
+        root = self.rootnode
+        if root._alignmentTable:
+            for entry in root._alignmentTable:
+                if fnmatch(str(path).replace(os.sep, '/').lower(), entry.strip().lower()):
+                    return root._alignmentTable[entry]
+        return 4
+
     def _get_node_info(self, node: FSTNode, counter: int, strTabSize: int) -> (int, int):
         counter += 1
         if counter > 1:
             strTabSize += len(node.name) + 1
 
         for child in node.children:
-            counter, strTabSize = self._get_node_info(
-                child, counter, strTabSize)
+            counter, strTabSize = self._get_node_info(child, counter, strTabSize)
 
         return counter, strTabSize
-
-    def _collect_size(self, size: int) -> int:
-        for child in self.children:
-            if child.is_file():
-                size += (child.size + 0x7FF) & -0x800
-            else:
-                size = child._collect_size(size)
-
-        return (size + 0x7FF) & -0x800
 
 
 class FSTRoot(FSTNode):
@@ -222,7 +218,7 @@ class FSTRoot(FSTNode):
 
     def __len__(self):
         return self.entryCount
-
+        
     def find_by_path(self, path: Path) -> FSTNode:
         for node in self.rfiles:
             if node.path == path:
@@ -233,12 +229,48 @@ class FSTRoot(FSTNode):
 
         for node in sorted(filenodes, key=lambda x: x._fileoffset, reverse=reverse):
             yield node
+        
+    def _init_alignment_table(self, configPath: Path):
+        with configPath.open("r") as config:
+            data = json.load(config)
+
+        self._alignmentTable = data["alignment"]
+
+    def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
+        if prev:
+            offset = node._fileoffset - (prev._fileoffset + prev.size)
+        else:
+            offset = node._fileoffset
+
+        if offset == 0:
+            return 4
+
+        alignment = 4
+        mask = 0x7FFF
+        for _ in range(13):
+            if (node._fileoffset & mask) == 0:
+                alignment = mask + 1
+                break
+            mask >>= 1
+
+        mask = 0x7FFF
+        found = False
+        for _ in range(13):
+            if (offset & mask) == 0:
+                if mask + 1 <= alignment:
+                    alignment = mask + 1
+                    found = True
+                    break
+                else:
+                    found = True
+                    break
+            mask >>= 1
+        
+        if not found:
+            return 4
+        return alignment
 
 class FST(FSTRoot):
-    # ---------------------------------------------------------------------- #
-    #  TODO: Implement custom file alignment,                                #
-    #        Inject custom game id and version                               #
-    # ---------------------------------------------------------------------- #
 
     def __init__(self, root: Path):
         super().__init__()
@@ -257,13 +289,38 @@ class FST(FSTRoot):
     def strTableOfs(self):
         return len(self) * 0xC
 
+    def rcreate(self, path: Path, parentnode: FSTNode = None, ignorePath=()):
+        for entry in path.iterdir():
+            skip = False
+            for p in ignorePath:
+                if entry == p:
+                    skip = True
+                    break
+            if skip:
+                continue
+
+            if entry.is_file():
+                child = FSTNode.file(entry.name)
+                child.size = entry.stat().st_size
+                if parentnode is not None:
+                    parentnode.add_child(child)
+            elif entry.is_dir():
+                child = FSTNode.folder(entry.name)
+                self.rcreate(entry, child, ignorePath=ignorePath)
+                if parentnode is not None:
+                    parentnode.add_child(child)
+            else:
+                raise InvalidEntryError("Not a dir or file")
+
+        self._init_alignment_table(self.root / "sys" / ".config.json")
+
     def print_info(self, fst=None):
         def print_tree(node: FSTNode, string: str, depth: int) -> str:
             if node.is_file():
                 string += "  "*depth + node.name + "\n"
             else:
                 string += "  "*depth + \
-                    f"{node.name} ({node.dirparent}, {node.dirnext})\n" + \
+                    f"{node.name} ({node._dirparent}, {node._dirnext})\n" + \
                     "  "*depth + "{\n"
                 for child in node.children:
                     string = print_tree(child, string, depth + 1)
@@ -301,7 +358,7 @@ class FST(FSTRoot):
         return self
 
     def save(self, fst, startpos: int = 0):
-        self._init_alignment_table(self.root / ".config.json")
+        self._init_alignment_table(self.root / "sys" / ".config.json")
         self.entryCount, _ = self._get_node_info(self, 0, 0)
 
         fst.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
@@ -309,12 +366,9 @@ class FST(FSTRoot):
 
         self._curEntry = 1
         self._strOfs = 0
+        self._dataOfs = align_int(startpos, 4)
         for child in self.children:
-            align = self._get_alignment(child.path)
-            self._dataOfs = align_int(startpos, align)
             self._write_nodes(fst, child)
-
-        fst.write(b"\x00" * ((fst.tell() + 3) & -4))
 
     def _read_nodes(self, fst, node: FSTNode) -> (FSTNode, int):
         _type = read_ubyte(fst)
@@ -330,8 +384,8 @@ class FST(FSTRoot):
 
         if _type == FSTNode.FOLDER:
             node.type = FSTNode.FOLDER
-            node.dirparent = _entryOfs
-            node.dirnext = _size
+            node._dirparent = _entryOfs
+            node._dirnext = _size
 
             while self._curEntry < _size:
                 child = self._read_nodes(fst, FSTNode.empty())
@@ -347,6 +401,7 @@ class FST(FSTRoot):
         align = self._get_alignment(node.path)
         self._dataOfs = align_int(self._dataOfs, align)
         if node.is_file():
+            print(hex(self._dataOfs), hex(node.size), node.name)
             if node._fileoffset == None:
                 node._fileoffset = self._dataOfs
 
@@ -373,50 +428,3 @@ class FST(FSTRoot):
 
         for child in node.children:
             self._write_nodes(fst, child)
-
-    def _init_alignment_table(self, configPath: Path):
-        with configPath.open("r") as config:
-            data = json.load(config)
-
-        self._alignmentTable = data["alignment"]
-
-    def _get_alignment(self, path: [Path, str]) -> int:
-        if self._alignmentTable:
-            for entry in self._alignmentTable:
-                if fnmatch(str(path).replace(os.sep, '/').lower(), entry.strip().lower()):
-                    return self._alignmentTable[entry]
-        return 4
-
-    def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
-        if prev:
-            offset = node._fileoffset - (prev._fileoffset + prev.size)
-        else:
-            offset = node._fileoffset
-
-        if offset == 0:
-            return 4
-
-        alignment = 4
-        mask = 0x7FFF
-        for _ in range(13):
-            if (node._fileoffset & mask) == 0:
-                alignment = mask + 1
-                break
-            mask >>= 1
-
-        mask = 0x7FFF
-        found = False
-        for _ in range(13):
-            if (offset & mask) == 0:
-                if mask + 1 <= alignment:
-                    alignment = mask + 1
-                    found = True
-                    break
-                else:
-                    found = True
-                    break
-            mask >>= 1
-        
-        if not found:
-            return 4
-        return alignment
