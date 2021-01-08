@@ -91,7 +91,7 @@ class GamecubeISO(ISOBase):
 
             self.fst = BytesIO()
             self.rcreate(self.root, self, ignorePath=(self.root / "sys",))
-            self.save(self.fst, (self.MaxSize - self.datasize) & -32768)
+            self.save(self.fst, (self.MaxSize - self.datasize) & -self._get_greatest_alignment())
 
             self.bootheader.fstSize = len(self.fst.getbuffer())
             self.bootheader.fstMaxSize = self.bootheader.fstSize

@@ -188,6 +188,10 @@ class FSTNode(object):
 
         return align_int(size, 4)
 
+    def _get_greatest_alignment(self) -> int:
+        root = self.rootnode
+        return sorted(root._alignmentTable.values(), reverse=True)[0]
+
     def _get_alignment(self, path: [Path, str]) -> int:
         root = self.rootnode
         if root._alignmentTable:
