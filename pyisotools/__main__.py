@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from iso import GamecubeISO
+from pyisotools.iso import GamecubeISO
 
 if __name__ == "__main__":
     parser = ArgumentParser("pyisotools", description="ISO tool for extracting/building Gamecube ISOs", allow_abbrev=False)
