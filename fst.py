@@ -405,7 +405,6 @@ class FST(FSTRoot):
         align = self._get_alignment(node.path)
         self._dataOfs = align_int(self._dataOfs, align)
         if node.is_file():
-            print(hex(self._dataOfs), hex(node.size), node.name)
             if node._fileoffset == None:
                 node._fileoffset = self._dataOfs
 
