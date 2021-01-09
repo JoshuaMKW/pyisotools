@@ -5,11 +5,12 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
+from dolreader.dol import DolFile
+
 from pyisotools.apploader import Apploader
 from pyisotools.bi2 import BI2
 from pyisotools.bnrparser import BNR
 from pyisotools.boot import Boot
-from pyisotools.dolreader import DolFile
 from pyisotools.fst import FST, FSTNode, FSTRoot
 from pyisotools.iohelper import read_uint32
 
