@@ -133,7 +133,7 @@ class GamecubeISO(ISOBase):
             for child in self.rfiles:
                 if child.is_file():
                     ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
-                    ISO.write(child.path.read_bytes())
+                    ISO.write((self.root.parent / child.path).read_bytes())
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
 
     def extract(self, iso: Path, dest: [Path, str] = None):

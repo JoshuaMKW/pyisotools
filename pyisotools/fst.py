@@ -217,6 +217,9 @@ class FSTRoot(FSTNode):
         self.entryCount = 0
         self._id = 0
 
+        self._alignmentTable = {}
+        self._locationTable = {}
+
     def __repr__(self):
         return f"FST Root <{self.entryCount} entries>"
 
@@ -234,11 +237,12 @@ class FSTRoot(FSTNode):
         for node in sorted(filenodes, key=lambda x: x._fileoffset, reverse=reverse):
             yield node
 
-    def _init_alignment_table(self, configPath: Path):
+    def _init_tables(self, configPath: Path):
         with configPath.open("r") as config:
             data = json.load(config)
 
         self._alignmentTable = data["alignment"]
+        self._locationTable = data["location"]
 
     def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
         if prev:
@@ -285,8 +289,6 @@ class FST(FSTRoot):
         self._dataOfs = 0
         self._prevfile = None
 
-        self._alignmentTable = {}
-
     def __repr__(self):
         return f"FST Object <{self.entryCount} entries>"
 
@@ -317,7 +319,7 @@ class FST(FSTRoot):
             else:
                 raise InvalidEntryError("Not a dir or file")
 
-        self._init_alignment_table(self.root / "sys" / ".config.json")
+        self._init_tables(self.root / "sys" / ".config.json")
 
     def print_info(self, fst=None):
         def print_tree(node: FSTNode, string: str, depth: int) -> str:
@@ -363,7 +365,7 @@ class FST(FSTRoot):
         return self
 
     def save(self, fst, startpos: int = 0):
-        self._init_alignment_table(self.root / "sys" / ".config.json")
+        self._init_tables(self.root / "sys" / ".config.json")
         self.entryCount, _ = self._get_node_info(self, 0, 0)
 
         fst.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
