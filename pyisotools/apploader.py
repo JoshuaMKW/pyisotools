@@ -15,7 +15,7 @@ class Apploader(object):
         size = read_uint32(f)
         size += read_uint32(f)
         f.seek(-0x1C, 1)
-        self._rawdata = BytesIO(f.read(size))
+        self._rawdata = BytesIO(f.read(size + 0x20))
 
     @property
     def buildDate(self) -> str:
@@ -57,5 +57,4 @@ class Apploader(object):
         write_uint32(self._rawdata, size)
 
     def save(self, _io):
-        _io.write(self._rawdata.getvalue()[
-                  :self.loaderSize + self.trailerSize])
+        _io.write(self._rawdata.getvalue()[:self.loaderSize + self.trailerSize + 0x20])

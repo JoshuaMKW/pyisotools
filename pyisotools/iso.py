@@ -122,6 +122,18 @@ class GamecubeISO(ISOBase):
 
         dest.parent.mkdir(parents=True, exist_ok=True)
 
+        with (self.root / "sys" / "boot.bin").open("wb") as boot:
+            self.bootheader.save(boot)
+
+        with (self.root / "sys" / "bi2.bin").open("wb") as bi2:
+            self.bootinfo.save(bi2)
+
+        with (self.root / "sys" / "apploader.img").open("wb") as appldr:
+            self.apploader.save(appldr)
+
+        with (self.root / "sys" / "fst.bin").open("wb") as fst:
+            fst.write(self.fst.getvalue())
+
         with dest.open("wb") as ISO:
             self.bootheader.save(ISO)
             self.bootinfo.save(ISO)
