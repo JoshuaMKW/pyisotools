@@ -190,7 +190,8 @@ class GamecubeISO(ISOBase):
                           "version": self.bootheader.version,
                           "author": self.bnr.developerTitle,
                           "description": self.bnr.gameDescription,
-                          "alignment": self._alignmentTable}
+                          "alignment": self._alignmentTable,
+                          "location": {}}
                 json.dump(config, f, indent=4)
 
             for root, _, filenodes in self.walk():
