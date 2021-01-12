@@ -95,7 +95,7 @@ class GamecubeISO(ISOBase):
                 self.bootheader.dolOffset + len(self.dol.getbuffer()) + 0x7FF) & -0x800
 
             self.fst = BytesIO()
-            self.rcreate(self.root, self, ignorePath=(self.root / "sys",))
+            self.rcreate(self.root, self, ignoreList=[self.root / "sys"])
             self.save(self.fst, (self.MaxSize - self.datasize)
                       & -self._get_greatest_alignment())
 
@@ -143,9 +143,12 @@ class GamecubeISO(ISOBase):
             ISO.write(b"\x00" * (self.bootheader.fstOffset - ISO.tell()))
             ISO.write(self.fst.getvalue())
             for child in self.rfiles:
-                if child.is_file():
+                if child.is_file() and not child._get_excluded():
                     ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
+                    ISO.seek(child._fileoffset)
+                    print(hex(child._fileoffset))
                     ISO.write((self.root.parent / child.path).read_bytes())
+                    ISO.seek(0, 2)
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
 
     def extract(self, iso: Path, dest: [Path, str] = None):
@@ -203,7 +206,8 @@ class GamecubeISO(ISOBase):
                           "author": self.bnr.developerTitle,
                           "description": self.bnr.gameDescription,
                           "alignment": self._alignmentTable,
-                          "location": {}}
+                          "location": {},
+                          "exclude": []}
                 json.dump(config, f, indent=4)
 
             for root, _, filenodes in self.walk():
