@@ -146,7 +146,6 @@ class GamecubeISO(ISOBase):
                 if child.is_file() and not child._get_excluded():
                     ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
                     ISO.seek(child._fileoffset)
-                    print(hex(child._fileoffset))
                     ISO.write((self.root.parent / child.path).read_bytes())
                     ISO.seek(0, 2)
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))

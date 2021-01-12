@@ -450,7 +450,6 @@ class FST(FSTRoot):
             skip = False
             for p in ignoreList:
                 if fnmatch(entry, p):
-                    print(f"Skipping {entry}, {p}")
                     skip = True
                     break
             if skip:
