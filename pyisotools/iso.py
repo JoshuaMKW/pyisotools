@@ -95,7 +95,7 @@ class GamecubeISO(ISOBase):
                 self.bootheader.dolOffset + len(self.dol.getbuffer()) + 0x7FF) & -0x800
 
             self.fst = BytesIO()
-            self.rcreate(self.root, self, ignoreList=[self.root / "sys"])
+            self.rcreate(self.root / "files", self, ignoreList=[])
             self.save(self.fst, (self.MaxSize - self.datasize)
                       & -self._get_greatest_alignment())
 
@@ -122,7 +122,7 @@ class GamecubeISO(ISOBase):
 
         dest.parent.mkdir(parents=True, exist_ok=True)
 
-        with (self.root / "sys" / "boot.bin").open("wb") as boot:
+        with (self.root.parent / "sys" / "boot.bin").open("wb") as boot:
             self.bootheader.save(boot)
 
         with (self.root / "sys" / "bi2.bin").open("wb") as bi2:
@@ -146,7 +146,7 @@ class GamecubeISO(ISOBase):
                 if child.is_file() and not child._get_excluded():
                     ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
                     ISO.seek(child._fileoffset)
-                    ISO.write((self.root.parent / child.path).read_bytes())
+                    ISO.write((self.root / child.path).read_bytes())
                     ISO.seek(0, 2)
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
 
@@ -160,7 +160,7 @@ class GamecubeISO(ISOBase):
             self.dol = DolFile(iso, self.bootheader.dolOffset)
             self.get_fst(iso)
 
-            bnrNode = self.find_by_path(Path(self.root.name, "opening.bnr"))
+            bnrNode = self.find_by_path(Path("files", "opening.bnr"))
             iso.seek(bnrNode._fileoffset)
             self.bnr = BNR(iso)
 
@@ -214,7 +214,7 @@ class GamecubeISO(ISOBase):
                     root.mkdir()
 
                 for node in filenodes:
-                    (self.root.parent / root).mkdir(parents=True, exist_ok=True)
-                    with (self.root.parent / root / node.name).open("wb") as f:
+                    (self.root / root).mkdir(parents=True, exist_ok=True)
+                    with (self.root / root / node.name).open("wb") as f:
                         _iso.seek(node._fileoffset)
                         f.write(_iso.read(node.size))

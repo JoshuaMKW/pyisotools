@@ -231,7 +231,7 @@ class FSTNode(object):
 
 class FSTRoot(FSTNode):
     def __init__(self):
-        super().__init__("root", FSTNode.FOLDER)
+        super().__init__("files", FSTNode.FOLDER)
         self.entryCount = 0
         self._id = 0
 
@@ -318,8 +318,11 @@ class FST(FSTRoot):
         return len(self) * 0xC
 
     def rcreate(self, path: Path, parentnode: FSTNode = None, ignoreList=[]):
-        self._init_tables(path / "sys" / ".config.json") 
-        ignoreList.append(*self._excludeTable)
+        self._init_tables(path / "sys" / ".config.json")
+
+        if len(self._excludeTable) > 0:
+            ignoreList.append(*self._excludeTable)
+            
         self._load_from_path(path, parentnode, ignoreList)
 
     def print_info(self, fst=None):
