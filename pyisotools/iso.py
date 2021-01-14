@@ -60,21 +60,20 @@ class GamecubeISO(ISOBase):
     def build(self, root: Path, dest: [Path, str] = None, genNewInfo: bool = False):
 
         def _init_sys(self, genNewInfo: bool):
-            systemPath = self.root / "sys"
-            self.dol = BytesIO((systemPath / "main.dol").read_bytes())
+            self.dol = BytesIO((self.root / "sys" / "main.dol").read_bytes())
 
-            with (systemPath / "boot.bin").open("rb") as f:
+            with (self.root / "sys" / "boot.bin").open("rb") as f:
                 self.bootheader = Boot(f)
 
-            with (systemPath / "bi2.bin").open("rb") as f:
+            with (self.root / "sys" / "bi2.bin").open("rb") as f:
                 self.bootinfo = BI2(f)
 
-            with (systemPath / "apploader.img").open("rb") as f:
+            with (self.root / "sys" / "apploader.img").open("rb") as f:
                 self.apploader = Apploader(f)
 
-            self.bnr = BNR((self.root / "opening.bnr"))
+            self.bnr = BNR(self.root / "files" / "opening.bnr")
 
-            with (systemPath / ".config.json").open("r") as f:
+            with (self.root / "sys" / ".config.json").open("r") as f:
                 config = json.load(f)
 
             if genNewInfo:
@@ -122,7 +121,7 @@ class GamecubeISO(ISOBase):
 
         dest.parent.mkdir(parents=True, exist_ok=True)
 
-        with (self.root.parent / "sys" / "boot.bin").open("wb") as boot:
+        with (self.root / "sys" / "boot.bin").open("wb") as boot:
             self.bootheader.save(boot)
 
         with (self.root / "sys" / "bi2.bin").open("wb") as bi2:

@@ -318,7 +318,7 @@ class FST(FSTRoot):
         return len(self) * 0xC
 
     def rcreate(self, path: Path, parentnode: FSTNode = None, ignoreList=[]):
-        self._init_tables(path / "sys" / ".config.json")
+        self._init_tables(self.root / "sys" / ".config.json")
 
         if len(self._excludeTable) > 0:
             ignoreList.append(*self._excludeTable)
