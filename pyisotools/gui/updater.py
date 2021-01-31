@@ -76,22 +76,10 @@ class GitReleaseUpdateScraper(QThread):
         while True:
             if self.skipCount <= 0:
                 self.skipCount = 0
-                try:
-                    info = self.get_newest_version()
-                except AttributeError:
-                    pass
-                else:
-                    if isinstance(info, ReleaseData) and LooseVersion(info.version) > LooseVersion(__version__):
-                        self.updateFound.emit(info)
-                    else:
-                        self.updateFound.emit(ReleaseData("v2.0.1", '<div class="markdown-body">\n'
-                                                                    "    <h1>Changelog</h1>\n"
-                                                                    "<ul>\n"
-                                                                    '<li><g-emoji class="g-emoji" alias="construction" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f6a7.png">🚧</g-emoji> Fixed error caused by overflowing the lower 16 bits of the target address (Happened with NTSC-U MKW <code>dol</code>)</li>\n'
-                                                                    '<li><g-emoji class="g-emoji" alias="no_entry" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/26d4.png">⛔</g-emoji> Removed deprecated option <code>LEGACY</code> which continuously broke various loaders and was only a limitation</li>\n'
-                                                                    '<li><g-emoji class="g-emoji" alias="sparkles" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/2728.png">✨</g-emoji> Fun code refactoring that most people will never see :)</li>\n'
-                                                                    "</ul>\n"
-                                                                    "</div>", parentURL="https://github.com/JoshuaMKW/pyisotools/releases/latest"))
+                
+                info = self.get_newest_version()
+                if isinstance(info, ReleaseData) and LooseVersion(info.version) > LooseVersion(__version__):
+                    self.updateFound.emit(info)
             else:
                 self.skipCount -= 1
             

@@ -368,7 +368,7 @@ class GamecubeISO(ISOBase):
         self.progress.set_ready(True)
 
         if dest is not None:
-            self.root = Path(dest / "root")
+            self.root = Path(f"{dest}/root")
 
         systemPath = self.systemPath
         self.root.mkdir(parents=True, exist_ok=True)

@@ -38,10 +38,11 @@ if __name__ == "__main__":
         args = parser.parse_args()
 
         src = Path(args.src).resolve()
-        iso = GamecubeISO()
         if args.job == "E":
-            iso.extract(src, args.dest)
+            iso = GamecubeISO.from_iso(src)
+            iso.extract(args.dest)
         elif args.job == "B":
-            iso.build(src, args.dest, genNewInfo=args.newinfo)
+            iso = GamecubeISO.from_root(src, genNewInfo=args.newinfo)
+            iso.build(args.dest)
         else:
             parser.print_help()

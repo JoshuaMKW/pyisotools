@@ -1,5 +1,6 @@
 import pyisotools
 import setuptools
+import os
 
 with open("README.md", "r", encoding="utf-8") as fh:
     longDescription = fh.read()
@@ -15,7 +16,8 @@ setuptools.setup(
     author_email='joshuamkw2002@gmail.com',
     license='GNU General Public License v3.0',
     packages=setuptools.find_packages(),
-    install_requires=["dolreader", "pathos"],
+    include_package_data=True,
+    install_requires=["dolreader"],
 
     classifiers=[
         'Development Status :: 4 - Beta',
