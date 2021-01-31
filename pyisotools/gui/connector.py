@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import traceback
+import webbrowser
 from pathlib import Path
 
 from PIL import Image, ImageQt
@@ -25,7 +26,9 @@ from ..bnrparser import BNR
 from ..iso import FSTNode, GamecubeISO, ISOBase
 from .customwidgets import FSTTreeWidget
 from .nodewindow import Ui_NodeFieldWindow
-from .workpathing import get_program_folder
+from .updater import GitReleaseUpdateScraper, ReleaseData
+from .updatewindow import Ui_UpdateDialog
+from .workpathing import get_program_folder, resource_path
 
 __GLOBAL_STATE = [True, ""]
 
@@ -195,6 +198,10 @@ class Controller(QMainWindow):
         self._fromIso = False
         self._viewPath = None
 
+        self.updater = GitReleaseUpdateScraper("JoshuaMKW", "pyisotools")
+        self.updater.updateFound.connect(self.notify_update)
+        self.updater.start()
+
     @property
     def programConfig(self):
         versionStub = __version__.replace(".", "-")
@@ -202,7 +209,22 @@ class Controller(QMainWindow):
 
     def closeEvent(self, event):
         self.update_program_config()
+        self.updater.exit(0)
         event.accept()
+
+    def notify_update(self, releaseInfo: ReleaseData):
+        dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
+        updateWindow = Ui_UpdateDialog()
+        updateWindow.setupUi(dialog)
+        dialog.setModal(True)
+
+        updateWindow.updateLabel.setText(f"pyisotools {releaseInfo.version} available!")
+        updateWindow.changelogTextEdit.setHtml(releaseInfo.info)
+
+        if dialog.exec_() == QDialog.Accepted:
+            webbrowser.open_new_tab(releaseInfo.parentURL)
+
+        self.updater.skipCount = 60
 
     def is_from_iso(self) -> bool:
         return self._fromIso
