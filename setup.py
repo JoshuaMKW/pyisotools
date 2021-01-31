@@ -15,7 +15,7 @@ setuptools.setup(
     author_email='joshuamkw2002@gmail.com',
     license='GNU General Public License v3.0',
     packages=setuptools.find_packages(),
-    install_requires=["dolreader"],
+    install_requires=["dolreader", "pathos"],
 
     classifiers=[
         'Development Status :: 4 - Beta',

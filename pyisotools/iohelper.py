@@ -62,12 +62,8 @@ def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -
 
     io.seek(offset)
     while (char := io.read(1)) != b"\x00":
-        try:
-            string += char.decode(encoding)
-            length += 1
-        except UnicodeDecodeError:
-            raise UnicodeDecodeError(f"{char} at pos {length} is not a valid {encoding} character")
-        
+        string += char.decode(encoding)
+        length += 1
         if length > (maxlen-1) and maxlen != 0:
             return string
 

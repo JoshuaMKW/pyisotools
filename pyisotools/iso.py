@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import json
 import os
-
+import time
 from datetime import datetime
+from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
+from sortedcontainers import SortedDict, SortedList
 
 from dolreader.dol import DolFile
 
@@ -11,34 +15,198 @@ from pyisotools.apploader import Apploader
 from pyisotools.bi2 import BI2
 from pyisotools.bnrparser import BNR
 from pyisotools.boot import Boot
-from pyisotools.fst import FST, FSTNode, FSTRoot
-from pyisotools.iohelper import read_uint32
+from pyisotools.fst import (FST, FSTNode, FSTRoot, InvalidEntryError,
+                            InvalidFSTError)
+from pyisotools.iohelper import (align_int, read_string, read_ubyte,
+                                 read_uint32, write_uint32)
 
 
 class FileSystemTooLargeError(Exception):
     pass
 
 
-class ISOBase(FST):
+class _Progress(object):
+    def __init__(self):
+        self.jobProgress = 0
+        self.jobSize = 0
+        self._isReady = False
+
+    def set_ready(self, ready: bool):
+        self._isReady = ready
+
+    def is_ready(self) -> bool:
+        return self._isReady
+
+
+class _ISOInfo(FST):
+
+    def __init__(self, iso: Path = None):
+        super().__init__()
+        self.root: Path = None
+
+        self._curEntry = 0
+        self._strOfs = 0
+        self._dataOfs = 0
+        self._prevfile = None
+
+
+class ISOBase(_ISOInfo):
 
     def __init__(self):
         super().__init__()
+        self.progress = _Progress()
+
+        self.isoPath = None
         self.bootheader = None
         self.bootinfo = None
         self.apploader = None
         self.dol = None
-        self.fst = None
+        self._rawFST = None
 
-    def get_fst(self, iso) -> FST:
-        iso.seek(0x424)
+        self._alignmentTable = SortedDict()
+        self._locationTable = SortedDict()
+        self._excludeTable = SortedList()
 
-        _fstloc = read_uint32(iso)
-        _fstsize = read_uint32(iso)
+    def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> (FSTNode, int):
+        _type = read_ubyte(fst)
+        _nameOfs = int.from_bytes(fst.read(3), "big", signed=False)
+        _entryOfs = read_uint32(fst)
+        _size = read_uint32(fst)
 
-        iso.seek(_fstloc)
+        _oldpos = fst.tell()
+        node.name = read_string(fst, strTabOfs + _nameOfs)
+        fst.seek(_oldpos)
 
-        self.fst = BytesIO(iso.read(_fstsize))
-        return self.load(self.fst)
+        node._id = self._curEntry
+
+        self._curEntry += 1
+
+        if _type == FSTNode.FOLDER:
+            node.type = FSTNode.FOLDER
+            node._dirparent = _entryOfs
+            node._dirnext = _size
+
+            while self._curEntry < _size:
+                child = self._read_nodes(fst, FSTNode.empty(), strTabOfs)
+                node.add_child(child)
+        else:
+            node.type = FSTNode.FILE
+            node.size = _size
+            node._fileoffset = _entryOfs
+
+        return node
+
+    def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: tuple = ()):
+        for entry in path.iterdir():
+            disable = False
+            for p in ignoreList:
+                if entry.match(p):
+                    disable = True
+
+            self._curEntry += 1
+
+            if entry.is_file():
+                child = FSTNode.file(entry.name)
+                if parentnode is not None:
+                    parentnode.add_child(child)
+
+                child.size = entry.stat().st_size
+                
+                child._alignment = self._get_alignment(child)
+                child._position = self._get_location(child)
+                child._exclude = disable
+
+                if self._position:
+                    self._fileoffset = self._position
+                else:
+                    if not disable:
+                        self._fileoffset = self._dataOfs
+                    else:
+                        self._fileoffset = 0
+                
+                child._id = self._curEntry - 1
+
+                if not disable and not child._position:
+                    self._dataOfs += child.size
+
+            elif entry.is_dir():
+                child = FSTNode.folder(entry.name)
+                if parentnode is not None:
+                    parentnode.add_child(child)
+
+                child._id = self._curEntry - 1
+                child._exclude = disable
+
+                self._load_from_path(entry, child, ignoreList=ignoreList)
+
+                child._dirnext = len(child) + child._id
+            else:
+                raise InvalidEntryError("Not a dir or file")
+
+    def _init_tables(self, configPath: Path = None):
+        if configPath and configPath.is_file():
+            with configPath.open("r") as config:
+                data = json.load(config)
+
+            self._alignmentTable = SortedDict(data["alignment"])
+            self._locationTable = SortedDict(data["location"])
+            self._excludeTable = SortedList(data["exclude"])
+        else:
+            self._alignmentTable = SortedDict()
+            self._locationTable = SortedDict()
+            self._excludeTable = SortedList()
+
+    def _recursive_extract(self, path: Path, dest: Path, iso):
+        node = self.find_by_path(path)
+        if not node:
+            return
+
+        if node.is_file():
+            iso.seek(node._fileoffset)
+            dest.write_bytes(iso.read(node.size))
+            self.progress.jobProgress += node.size
+        else:
+            dest.mkdir(parents=True, exist_ok=True)
+            for child in node.children:
+                self._recursive_extract(path/child.name, dest/child.name, iso)
+
+    def _collect_size(self, size: int) -> int:
+        for node in self.children:
+            if self._get_excluded(node) is True or self._get_location(node) is not None:
+                continue
+
+            if node.is_file():
+                alignment = self._get_alignment(node)
+                size = align_int(size, alignment)
+                size += node.size
+            else:
+                size = node._collect_size(size)
+
+        return align_int(size, 4)
+
+    def _get_greatest_alignment(self) -> int:
+        try:
+            return self._alignmentTable.peekitem()[1]
+        except IndexError:
+            return 4
+
+    def _get_alignment(self, node: FSTNode) -> int:
+        if self._alignmentTable:
+            for entry, align in self._alignmentTable.items():
+                if fnmatch(node.path, entry.strip()):
+                    return align
+        return 4
+
+    def _get_location(self, node: FSTNode) -> int:
+        if self._locationTable:
+            return self._locationTable.get(node.path)
+
+    def _get_excluded(self, node: FSTNode) -> bool:
+        if self._excludeTable:
+            for entry in self._excludeTable:
+                if fnmatch(node.path, entry.strip()):
+                    return True
+        return False
 
 
 class WiiISO(ISOBase):
@@ -57,163 +225,567 @@ class GamecubeISO(ISOBase):
         super().__init__()
         self.bnr = None
 
-    def build(self, root: Path, dest: [Path, str] = None, genNewInfo: bool = False):
+    @classmethod
+    def from_root(cls, root: Path, genNewInfo: bool = False) -> GamecubeISO:
+        virtualISO = cls()
+        virtualISO.init_from_root(root, genNewInfo)
 
-        def _init_sys(self, genNewInfo: bool):
-            self.dol = BytesIO((self.root / "sys" / "main.dol").read_bytes())
+        if ((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x7FF) & -0x800) + virtualISO.datasize > virtualISO.MaxSize:
+            raise FileSystemTooLargeError(
+                f"{((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x7FF) & -0x800) + virtualISO.datasize} is larger than the max size of a GCM ({virtualISO.MaxSize})")
 
-            with (self.root / "sys" / "boot.bin").open("rb") as f:
-                self.bootheader = Boot(f)
-
-            with (self.root / "sys" / "bi2.bin").open("rb") as f:
-                self.bootinfo = BI2(f)
-
-            with (self.root / "sys" / "apploader.img").open("rb") as f:
-                self.apploader = Apploader(f)
-
-            self.bnr = BNR(self.root / "files" / "opening.bnr")
-
-            with (self.root / "sys" / ".config.json").open("r") as f:
-                config = json.load(f)
-
-            if genNewInfo:
-                self.bnr.gameName = config["name"]
-                self.bnr.gameTitle = config["name"]
-                self.bootheader.gameName = config["name"]
-                self.bootheader.gameCode = config["gameid"][:4]
-                self.bootheader.makerCode = config["gameid"][4:6]
-                self.bootheader.version = config["version"]
-                self.bnr.developerName = config["author"]
-                self.bnr.developerTitle = config["author"]
-                self.bnr.gameDescription = config["description"]
-                self.apploader.buildDate = datetime.today().strftime("%Y/%m/%d")
-
-            self.bootheader.dolOffset = (
-                0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
-            self.bootheader.fstOffset = (
-                self.bootheader.dolOffset + len(self.dol.getbuffer()) + 0x7FF) & -0x800
-
-            self.fst = BytesIO()
-            self.rcreate(self.root / "files", self, ignoreList=[])
-            self.save(self.fst, (self.MaxSize - self.datasize)
-                      & -self._get_greatest_alignment())
-
-            self.bootheader.fstSize = len(self.fst.getbuffer())
-            self.bootheader.fstMaxSize = self.bootheader.fstSize
-
-            if ((self.bootheader.fstOffset + self.bootheader.fstSize + 0x7FF) & -0x800) + self.datasize > self.MaxSize:
-                raise FileSystemTooLargeError(
-                    f"{((self.bootheader.fstOffset + self.bootheader.fstSize + 0x7FF) & -0x800) + self.datasize} is larger than the max size of a GCM ({self.MaxSize})")
-
-        self.root = root
-        _init_sys(self, genNewInfo)
-
-        if dest is None:
-            dest = Path(
-                f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}].iso").resolve()
+        if virtualISO.bootinfo.countryCode == BI2.Country.JAPAN:
+            region = 2
+        elif virtualISO.bootinfo.countryCode == BI2.Country.KOREA:
+            region = 0
         else:
+            region = virtualISO.bootinfo.countryCode - 1
+        virtualISO.bnr = BNR(virtualISO.dataPath / "opening.bnr", region=region)
+
+        with (virtualISO.configPath).open("r") as f:
+            config = json.load(f)
+
+        if genNewInfo:
+            virtualISO.bnr.gameName = config["name"]
+            virtualISO.bnr.gameTitle = config["name"]
+            virtualISO.bnr.developerName = config["author"]
+            virtualISO.bnr.developerTitle = config["author"]
+            virtualISO.bnr.gameDescription = config["description"]
+
+        return virtualISO
+
+    @classmethod
+    def from_iso(cls, iso: Path):
+        virtualISO = cls()
+        virtualISO.init_from_iso(iso)
+
+        if virtualISO.bootinfo.countryCode == BI2.Country.JAPAN:
+            region = BNR.Regions.JAPAN
+        else:
+            region = virtualISO.bootinfo.countryCode - 1
+
+        bnrNode = virtualISO.find_by_path(Path("opening.bnr"))
+        with iso.open("rb") as _rawISO:
+            _rawISO.seek(bnrNode._fileoffset)
+            virtualISO.bnr = BNR.from_data(_rawISO, region=region, size=bnrNode.size)
+
+        with iso.open("rb") as _iso:
+            prev = FSTNode.file("fst.bin", None, virtualISO.bootheader.fstSize, virtualISO.bootheader.fstOffset)
+            for node in virtualISO.nodes_by_offset():
+                alignment = virtualISO._detect_alignment(node, prev)
+                if alignment > 4:
+                    virtualISO._alignmentTable[node.path] = alignment
+                prev = node
+
+        return virtualISO
+
+    @staticmethod
+    def build_root(root: Path, dest: [Path, str] = None, genNewInfo: bool = False):
+        virtualISO = GamecubeISO.from_root(root, genNewInfo)
+        virtualISO.build(dest)
+
+    @staticmethod
+    def extract_from(iso: Path, dest: [Path, str] = None):
+        virtualISO = GamecubeISO.from_iso(iso)
+        virtualISO.extract(dest)
+
+    def build(self, dest: [Path, str] = None, preCalc: bool = True):
+        self.progress.set_ready(False)
+        self.progress.jobProgress = 0
+        self.progress.jobSize = self.MaxSize
+        self.progress.set_ready(True)
+
+        if dest is not None:
             fmtpath = str(dest).replace(
                 r"%fullname%", f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}]")
             fmtpath = fmtpath.replace(r"%name%", self.bootheader.gameName)
             fmtpath = fmtpath.replace(
                 r"%gameid%", f"{self.bootheader.gameCode}{self.bootheader.makerCode}")
-            dest = Path(fmtpath)
 
-        dest.parent.mkdir(parents=True, exist_ok=True)
+            self.isoPath = Path(self.root / fmtpath)
 
-        with (self.root / "sys" / "boot.bin").open("wb") as boot:
+        self.isoPath.parent.mkdir(parents=True, exist_ok=True)
+
+        self.save_file_systemv((self.MaxSize - self.get_auto_blob_size())
+                               & -self._get_greatest_alignment(), False, preCalc)
+
+        self.bootheader.fstSize = len(self._rawFST.getbuffer())
+        self.bootheader.fstMaxSize = self.bootheader.fstSize
+
+        with (self.systemPath / "boot.bin").open("wb") as boot:
             self.bootheader.save(boot)
 
-        with (self.root / "sys" / "bi2.bin").open("wb") as bi2:
+        with (self.systemPath / "bi2.bin").open("wb") as bi2:
             self.bootinfo.save(bi2)
 
-        with (self.root / "sys" / "apploader.img").open("wb") as appldr:
+        with (self.systemPath / "apploader.img").open("wb") as appldr:
             self.apploader.save(appldr)
 
-        with (self.root / "sys" / "fst.bin").open("wb") as fst:
-            fst.write(self.fst.getvalue())
+        with (self.systemPath / "fst.bin").open("wb") as fst:
+            fst.write(self._rawFST.getvalue())
 
-        with dest.open("wb") as ISO:
+        with self.isoPath.open("wb") as ISO:
             self.bootheader.save(ISO)
+            self.progress.jobProgress += 0x440
+
             self.bootinfo.save(ISO)
+            self.progress.jobProgress += 0x2000
+
             self.apploader.save(ISO)
+            self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+
             ISO.write(b"\x00" * (self.bootheader.dolOffset - ISO.tell()))
-            ISO.write(self.dol.getvalue())
+            self.dol.save(ISO, self.bootheader.dolOffset)
+            self.progress.jobProgress += self.dol.size
+
+            ISO.seek(ISO.tell() + self.dol.size)
             ISO.write(b"\x00" * (self.bootheader.fstOffset - ISO.tell()))
-            ISO.write(self.fst.getvalue())
+            ISO.write(self._rawFST.getvalue())
+            self.progress.jobProgress += len(self._rawFST.getbuffer())
+
             for child in self.rfiles:
-                if child.is_file() and not child._get_excluded():
+                if child.is_file() and not self._get_excluded(child):
                     ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
                     ISO.seek(child._fileoffset)
-                    ISO.write((self.root / child.path).read_bytes())
+                    ISO.write((self.root / self.name /
+                               child.path).read_bytes())
                     ISO.seek(0, 2)
+                    self.progress.jobProgress += child.size
+
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
+            self.progress.jobProgress = self.MaxSize
 
-    def extract(self, iso: Path, dest: [Path, str] = None):
+    def extract(self, dest: [Path, str] = None):
+        self.progress.set_ready(False)
+        self.progress.jobProgress = 0
 
-        def _init_sys(self, iso):
-            iso.seek(0)
-            self.bootheader = Boot(iso)
-            self.bootinfo = BI2(iso)
-            self.apploader = Apploader(iso)
-            self.dol = DolFile(iso, self.bootheader.dolOffset)
-            self.get_fst(iso)
+        jobSize = self.size + \
+            (0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize))
+        jobSize += self.dol.size
+        jobSize += len(self._rawFST.getbuffer())
 
-            bnrNode = self.find_by_path(Path("files", "opening.bnr"))
-            iso.seek(bnrNode._fileoffset)
-            self.bnr = BNR(iso)
+        self.progress.jobSize = jobSize
+        self.progress.set_ready(True)
 
-        if dest is None:
-            self.root = Path("root").resolve()
-        else:
-            self.root = Path(dest, "root")
+        if dest is not None:
+            self.root = Path(dest / "root")
 
-        systemPath = self.root / "sys"
+        systemPath = self.systemPath
         self.root.mkdir(parents=True, exist_ok=True)
         systemPath.mkdir(exist_ok=True)
 
-        with iso.open("rb") as _iso:
-            _init_sys(self, _iso)
+        with (systemPath / "boot.bin").open("wb") as f:
+            self.bootheader.save(f)
 
-            prev = FSTNode("fst.bin", FSTNode.FILE, None,
-                           self.bootheader.fstSize, self.bootheader.fstOffset)
-            for node in self.nodes_by_offset():
-                self._alignmentTable[str(node.path).replace(
-                    os.sep, '/')] = self._detect_alignment(node, prev)
-                prev = node
+        self.progress.jobProgress += 0x440
 
-            with (systemPath / "boot.bin").open("wb") as f:
-                self.bootheader.save(f)
+        with (systemPath / "bi2.bin").open("wb") as f:
+            self.bootinfo.save(f)
 
-            with (systemPath / "bi2.bin").open("wb") as f:
-                self.bootinfo.save(f)
+        self.progress.jobProgress += 0x2000
 
-            with (systemPath / "apploader.img").open("wb") as f:
-                self.apploader.save(f)
+        with (systemPath / "apploader.img").open("wb") as f:
+            self.apploader.save(f)
 
-            with (systemPath / "main.dol").open("wb") as f:
-                self.dol.save(f)
+        self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
 
-            with (systemPath / "fst.bin").open("wb") as f:
-                f.write(self.fst.getvalue())
+        with (systemPath / "main.dol").open("wb") as f:
+            self.dol.save(f)
 
-            with (systemPath / ".config.json").open("w") as f:
-                config = {"name": self.bootheader.gameName,
-                          "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
-                          "version": self.bootheader.version,
-                          "author": self.bnr.developerTitle,
-                          "description": self.bnr.gameDescription,
-                          "alignment": self._alignmentTable,
-                          "location": {},
-                          "exclude": []}
-                json.dump(config, f, indent=4)
+        self.progress.jobProgress += self.dol.size
 
-            for root, _, filenodes in self.walk():
-                if not root.exists():
-                    root.mkdir()
+        with (systemPath / "fst.bin").open("wb") as f:
+            f.write(self._rawFST.getvalue())
 
-                for node in filenodes:
-                    (self.root / root).mkdir(parents=True, exist_ok=True)
-                    with (self.root / root / node.name).open("wb") as f:
-                        _iso.seek(node._fileoffset)
-                        f.write(_iso.read(node.size))
+        self.progress.jobProgress += len(self._rawFST.getbuffer())
+        self.save_config()
+
+        self.dataPath.mkdir(parents=True, exist_ok=True)
+        with self.isoPath.open("rb") as _iso:
+            for child in self.rchildren:
+                _dest = self.dataPath / child.path
+                if child.is_file():
+                    with _dest.open("wb") as f:
+                        _iso.seek(child._fileoffset)
+                        f.write(_iso.read(child.size))
+                        self.progress.jobProgress += child.size
+                else:
+                    _dest.mkdir(exist_ok=True)
+
+        self.progress.jobProgress = self.progress.jobSize
+
+    def extract_system_data(self, dest: [Path, str] = None):
+        self.progress.set_ready(False)
+        self.progress.jobProgress = 0
+
+        jobSize = 0x2440 + (self.apploader.loaderSize +
+                            self.apploader.trailerSize)
+        jobSize += self.dol.size
+        jobSize += len(self._rawFST.getbuffer())
+
+        self.progress.jobSize = jobSize
+        self.progress.set_ready(True)
+
+        systemPath = dest / "sys"
+        systemPath.mkdir(parents=True, exist_ok=True)
+
+        with (systemPath / "boot.bin").open("wb") as f:
+            self.bootheader.save(f)
+
+        self.progress.jobProgress += 0x440
+
+        with (systemPath / "bi2.bin").open("wb") as f:
+            self.bootinfo.save(f)
+
+        self.progress.jobProgress += 0x2000
+
+        with (systemPath / "apploader.img").open("wb") as f:
+            self.apploader.save(f)
+
+        self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+
+        with (systemPath / "main.dol").open("wb") as f:
+            self.dol.save(f)
+
+        self.progress.jobProgress += self.dol.size
+
+        with (systemPath / "fst.bin").open("wb") as f:
+            f.write(self._rawFST.getvalue())
+
+        self.progress.jobProgress += len(self._rawFST.getbuffer())
+
+    def save_system_data(self):
+        self.progress.set_ready(False)
+        self.progress.jobProgress = 0
+
+        jobSize = 0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize)
+        jobSize += self.dol.size
+        jobSize += self.num_children()
+
+        self.progress.jobSize = jobSize
+        self.progress.set_ready(True)
+
+        systemPath = self.root / "sys"
+
+        with (systemPath / "boot.bin").open("wb") as f:
+            self.bootheader.save(f)
+
+        self.progress.jobProgress += 0x440
+
+        with (systemPath / "bi2.bin").open("wb") as f:
+            self.bootinfo.save(f)
+
+        self.progress.jobProgress += 0x2000
+
+        with (systemPath / "apploader.img").open("wb") as f:
+            self.apploader.save(f)
+
+        self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+
+        with (systemPath / "main.dol").open("wb") as f:
+            self.dol.save(f)
+
+        self.progress.jobProgress += self.dol.size
+        self._save_config_regen()
+        self.progress.jobProgress = self.progress.jobSize
+
+    def save_system_datav(self):
+        self.progress.set_ready(False)
+        self.progress.jobProgress = 0
+
+        jobSize = 0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize)
+        jobSize += self.dol.size
+
+        self.progress.jobSize = jobSize
+        self.progress.set_ready(True)
+        
+        with self.isoPath.open("r+b") as ISO:
+            self.bootheader.save(ISO)
+            self.progress.jobProgress += 0x440
+
+            self.bootinfo.save(ISO)
+            self.progress.jobProgress += 0x2000
+
+            self.apploader.save(ISO)
+
+            ISO.write(b"\x00" * (self.bootheader.dolOffset - ISO.tell()))
+            self.dol.save(ISO, self.bootheader.dolOffset)
+
+            self.progress.jobProgress += self.dol.size
+
+    @property
+    def configPath(self) -> Path:
+        if self.root:
+            return self.root / "sys" / ".config.json"
+        else:
+            return None
+
+    @property
+    def systemPath(self) -> Path:
+        if self.root:
+            return self.root / "sys"
+        else:
+            return None
+
+    @property
+    def dataPath(self) -> Path:
+        if self.root:
+            return self.root / self.name
+        else:
+            return None
+
+    def get_auto_blob_size(self) -> int:
+        def _collect_size(node: FSTNode, _size: int):
+            for child in node.children:
+                if child._exclude or child._position:
+                    continue
+
+                if child.is_file():
+                    _size = align_int(_size, child._alignment) + child.size
+                else:
+                    _size = _collect_size(child, _size)
+
+            return _size
+
+        return _collect_size(self, 0)
+
+    def init_from_iso(self, iso: Path):
+        self.isoPath = iso
+        self.root = Path(iso.parent / "root").resolve()
+        with iso.open("rb") as _rawISO:
+            _rawISO.seek(0)
+            self.bootheader = Boot(_rawISO)
+            self.bootinfo = BI2(_rawISO)
+            self.apploader = Apploader(_rawISO)
+            self.dol = DolFile(_rawISO, startpos=self.bootheader.dolOffset)
+            _rawISO.seek(self.bootheader.fstOffset)
+            self._rawFST = BytesIO(_rawISO.read(self.bootheader.fstSize))
+
+        self._rawFST.seek(0)
+        self.load_file_systemv(self._rawFST)
+
+    def init_from_root(self, root: Path, genNewInfo: bool = False):
+        self.root = root
+
+        with (self.root / "sys" / "main.dol").open("rb") as _dol:
+            self.dol = DolFile(_dol)
+
+        with (self.root / "sys" / "boot.bin").open("rb") as f:
+            self.bootheader = Boot(f)
+
+        with (self.root / "sys" / "bi2.bin").open("rb") as f:
+            self.bootinfo = BI2(f)
+
+        with (self.root / "sys" / "apploader.img").open("rb") as f:
+            self.apploader = Apploader(f)
+
+        with self.configPath.open("r") as f:
+            config = json.load(f)
+
+        if genNewInfo:
+            self.bootheader.gameName = config["name"]
+            self.bootheader.gameCode = config["gameid"][:4]
+            self.bootheader.makerCode = config["gameid"][4:6]
+            self.bootheader.version = int(config["version"])
+            self.apploader.buildDate = datetime.today().strftime("%Y/%m/%d")
+
+        self.isoPath = Path(
+            root.parent / f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}].iso").resolve()
+
+        self.bootheader.dolOffset = (
+            0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
+        self.bootheader.fstOffset = (
+            self.bootheader.dolOffset + self.dol.size + 0x7FF) & -0x800
+
+        self._rawFST = BytesIO()
+        self.load_file_system(self.root / self.name,
+                              self, ignoreList=[])
+
+        self.bootheader.fstSize = len(self._rawFST.getbuffer())
+        self.bootheader.fstMaxSize = self.bootheader.fstSize
+
+    def extract_path(self, path: Path, dest: Path):
+        self.progress.set_ready(False)
+
+        node = self.find_by_path(path)
+
+        if not node:
+            return
+
+        self.progress.jobProgress = 0
+        self.progress.jobSize = node.datasize
+        self.progress.set_ready(True)
+
+        with self.isoPath.open("rb") as _rawISO:
+            self._recursive_extract(path, dest / node.name, _rawISO)
+
+        self.progress.jobProgress = self.progress.jobSize
+
+    def replace_path(self, path: str, new: Path):
+        """
+        Replaces the node that matches `path` with the data at path `new`
+
+            path: Virtual path to node to replace
+            new:  Path to file/folder to replace with
+        """
+        if not new.exists():
+            return
+
+        newNode = self.from_path(new)
+        oldNode = self.find_by_path(path)
+
+        oldNode.parent.add_child(newNode)
+        oldNode.destroy()
+
+    ## FST HANDLING ##
+
+    def pre_calc_offsets(self, startpos: int):
+        """
+        Pre calculates all node offsets for viewing the node locations before compile
+
+        The results of this function are only valid until the FST is changed in
+        a way that impacts file offsets
+        """
+        def _calc_data(node: FSTNode):
+            if node._position and node.is_file():
+                node._fileoffset = align_int(node._position, node._alignment)
+                return
+            else:
+                if node.is_file() and node._exclude is False:
+                    node._fileoffset = align_int(self._dataOfs, node._alignment)
+                    self._dataOfs += node.size
+                elif node._exclude:
+                    node._fileoffset = 0
+                    return
+
+            for child in node.children:
+                _calc_data(child)
+
+        self._dataOfs = align_int(startpos, 4)
+        for child in self.children:
+            _calc_data(child)
+
+        self._dataOfs = 0
+
+    def load_file_system(self, path: Path, parentnode: FSTNode = None, ignoreList=[]):
+        """
+        Converts a directory into an FST and loads into self for further use
+
+            path:       Path to input directory
+            parentnode: Parent to store all info under
+            ignorelist: List of filepaths to ignore as glob patterns
+        """
+
+        self._init_tables(self.configPath)
+
+        if len(self._excludeTable) > 0:
+            ignoreList.append(*self._excludeTable)
+
+        self._curEntry = 1
+        self._strOfs = 0
+        self._dataOfs = 0
+
+        self._load_from_path(path, parentnode, ignoreList)
+        self.pre_calc_offsets(self.MaxSize - self.get_auto_blob_size())
+        
+        self._curEntry = 0
+        self._strOfs = 0
+        self._dataOfs = 0
+
+    def load_file_systemv(self, fst):
+        """
+        Loads the file system data from a memory buffer into self for further use
+
+            fst: BytesIO or opened file object containing the FST of an ISO
+        """
+
+        if fst.read(1) != b"\x01":
+            raise InvalidFSTError("Invalid Root flag found")
+        elif fst.read(3) != b"\x00\x00\x00":
+            raise InvalidFSTError("Invalid Root string offset found")
+        elif fst.read(4) != b"\x00\x00\x00\x00":
+            raise InvalidFSTError("Invalid Root offset found")
+
+        self._alignmentTable = SortedDict()
+        entryCount = read_uint32(fst)
+
+        self._curEntry = 1
+        while self._curEntry < entryCount:
+            child = self._read_nodes(fst, FSTNode.empty(), entryCount * 0xC)
+            self.add_child(child)
+
+    def save_file_systemv(self, startpos: int = 0, useConfig: bool = True, preCalc: bool = True):
+        """
+        Save the file system data to the target ISO
+
+            fst:       BytesIO or opened file object to write fst data to
+            startpos:  Starting position in ISO to write files
+            useConfig: Initialize node info using the root config
+        """
+
+        if useConfig:
+            self._init_tables(self.configPath)
+            self.pre_calc_offsets(self.MaxSize - self.get_auto_blob_size())
+        elif preCalc:
+            self.pre_calc_offsets(self.MaxSize - self.get_auto_blob_size())
+
+        self._rawFST.seek(0)
+        self._rawFST.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
+        write_uint32(self._rawFST, len(self))
+
+        _curEntry = 1
+        _strOfs = 0
+        _strTableOfs = self.strTableOfs
+
+        for child in self.rchildren:
+            if child._exclude:
+                continue
+
+            child._id = _curEntry
+
+            self._rawFST.write(b"\x01" if child.is_dir() else b"\x00")
+            self._rawFST.write((_strOfs).to_bytes(3, "big", signed=False))
+            write_uint32(self._rawFST, child.parent._id if child.is_dir() else child._fileoffset)
+            write_uint32(self._rawFST, len(child) +
+                        _curEntry if child.is_dir() else child.size)
+
+            _curEntry += 1
+
+            _oldpos = self._rawFST.tell()
+            self._rawFST.seek(_strOfs + _strTableOfs)
+            self._rawFST.write(child.name.encode("ascii") + b"\x00")
+            _strOfs += len(child.name) + 1
+
+            self._rawFST.seek(_oldpos)
+
+    def load_config(self, path: Path = None):
+        self._init_tables(path)
+
+    def save_config(self):
+        config = {"name": self.bootheader.gameName,
+                  "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
+                  "version": self.bootheader.version,
+                  "author": self.bnr.developerTitle,
+                  "description": self.bnr.gameDescription,
+                  "alignment": self._alignmentTable,
+                  "location": self._locationTable,
+                  "exclude": [x for x in self._excludeTable]}
+
+        with self.configPath.open("w") as f:
+            json.dump(config, f, indent=4)
+
+    def _save_config_regen(self):
+        self._alignmentTable.clear()
+        self._locationTable.clear()
+        self._excludeTable.clear()
+
+        for node in self.rchildren:
+            if node.is_file():
+                if node._alignment > 4:
+                    self._alignmentTable[node.path] = node._alignment
+                if node._position:
+                    self._locationTable[node.path] = node._position
+            if node._exclude:
+                self._excludeTable.add(node.path)
+
+        self.save_config()

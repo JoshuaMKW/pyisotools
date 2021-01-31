@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-import json
-import os
-import sys
-import time
-from fnmatch import fnmatch
 from pathlib import Path
-
-from pyisotools.iohelper import align_int, read_string, read_ubyte, read_uint32, write_uint32
 
 
 class FileAccessOnFolderError(Exception):
@@ -31,44 +24,92 @@ class FSTNode(object):
     FILE = 0
     FOLDER = 1
 
-    def __init__(self, name: str, nodetype: int = None, nodeid: int = None, filesize: int = None, fileoffset: int = None, parentnode: int = None, nextnode: int = None):
+    def __init__(self, name: str, nodetype: int = None, nodeid: int = 0, parent: FSTNode = None, children: tuple = ()):
+        """
+        Initialize a new FSTNode object, and set the parent and children according to the optional args :parentnode: and :children:
+
+            name:     Name of the node
+            nodetype: Node type (0 = File, 1 = Folder)
+            nodeid:   Node id
+            parent:   Parent node
+            children: Tuple of children nodes
+        """
+
         self.name = name
         self.type = nodetype
 
+        # metadata
+        self._alignment = 4
+        self._position = None
+        self._exclude = False
+
         # file attributes
-        self._filesize = filesize
-        self._fileoffset = fileoffset
+        self._filesize = None
+        self._fileoffset = None
 
         # folder attributes
-        self._dirparent = parentnode
-        self._dirnext = nextnode
+        self._dirparent = None
+        self._dirnext = None
 
         self._children = {}
-        self._alignment = 4
         self._parent = None
-        self._id = None
+        self._id = nodeid
+
+        # setup
+        self.parent = parent
+
+        for child in children:
+            self.add_child(child)
+
 
     def __repr__(self):
-        return f"FST Node <{vars(self)}>"
+        if self.is_dir():
+            info = f"Parent: {self._parent}, Children: {self.size}"
+        else:
+            info = f"Offset: {self._fileoffset}, Size: {self.size}, Parent: {self._parent}"
+
+        return f"{self.__class__.__name__}<Type: {self.type}, {info}>"
 
     @classmethod
-    def file(cls, name: str):
-        return cls(name, FSTNode.FILE)
+    def file(cls, name: str, parent: FSTNode = None, size: int = None, offset: int = None):
+        node = cls(name, FSTNode.FILE, parent=parent)
+        node._filesize = size
+        node._fileoffset = offset
+        return node
 
     @classmethod
-    def folder(cls, name: str):
-        return cls(name, FSTNode.FOLDER)
+    def folder(cls, name: str, parent: FSTNode = None, children: list = ()):
+        return cls(name, FSTNode.FOLDER, parent=parent, children=children)
+
+    @classmethod
+    def from_path(cls, path: Path) -> FSTNode:
+        if path.is_file():
+            node = cls.file(path.name)
+            node.size = path.stat().st_size()
+        elif path.is_dir():
+            node = cls.folder(path.name)
+            for f in path.iterdir():
+                child = cls.from_path(f)
+                node.add_child(child)
+        else:
+            raise NotImplementedError(
+                "Initializing a node using anything other than a file or folder is not allowed")
+
+        return node
 
     @classmethod
     def empty(cls):
         return cls("")
 
     @property
-    def path(self) -> Path:
-        path = Path(self.name)
+    def path(self) -> str:
+        path = self.name
         parent = self.parent
         while parent is not None:
-            path = Path(parent.name) / path
+            if parent.is_root():
+                break
+
+            path = f"{parent.name}/{path}"
             parent = parent.parent
 
         return path
@@ -101,16 +142,36 @@ class FSTNode(object):
                 yield from node.rfiles
 
     @property
+    def rchildren(self) -> FSTNode:
+        for node in self.children:
+            yield node
+            yield from node.rchildren
+
+    @property
     def parent(self) -> FSTNode:
         return self._parent
 
     @parent.setter
     def parent(self, node: FSTNode):
         if self.parent is not None:
+            if self.is_dir():
+                if node is not None:
+                    diff = node._id - self._dirparent
+                    self._dirparent = node._id
+                else:
+                    diff = -self._dirparent
+                    self._dirparent = 0
+                for child in node.children:
+                    child.id += diff
             self.parent.remove_child(self)
+        else:
+            if node is not None:
+                self._dirparent = node._id
+            else:
+                self._dirparent = 0
 
         if node is not None:
-            node.add_child(self)
+            node._children[self.name] = self
 
         self._parent = node
 
@@ -133,39 +194,49 @@ class FSTNode(object):
         if self.is_file():
             return self._filesize
         else:
-            return self._get_node_info(self, 0, 0)[0]
-
-    @property
-    def datasize(self) -> int:
-        return self._collect_size(0)
+            return self.num_children()
 
     @size.setter
     def size(self, size: int):
         if self.is_file():
             self._filesize = size
 
-    def walk(self, topdown: bool = True):
-        dirs, files = [], []
-        for node in self.children:
-            if node.is_file():
-                files.append(node)
-            elif node.is_dir():
-                dirs.append(node)
+    @property
+    def datasize(self) -> int:
+        if self.is_file():
+            return self._filesize
+        else:
+            return self._collect_size(0)
 
-        if topdown:
-            yield self.path, dirs, files
-        for node in dirs:
-            yield from node.walk(topdown)
-        if not topdown:
-            yield self.path, dirs, files
+    def find_by_path(self, path: [Path, str]) -> FSTNode:
+        for node in self.rfiles:
+            if node.path.lower() == str(path).lower():
+                return node
+        for node in self.rdirs:
+            if node.path.lower() == str(path).lower():
+                return node
 
     def add_child(self, node: FSTNode):
         self._children[node.name] = node
-        node._parent = self
+        node.parent = self
 
     def remove_child(self, node: FSTNode):
         self._children.pop(node.name)
         node.parent = None
+
+    def num_children(self) -> int:
+
+        def _collect_children_count(node: FSTNode, counter: int) -> int:
+            for child in node.children:
+                counter = _collect_children_count(child, counter+1)
+            return counter
+
+        return _collect_children_count(self, 0)
+
+    def destroy(self):
+        self.parent = None
+        for child in self.children:
+            self.remove_child(child)
 
     def is_dir(self) -> bool:
         return self.type == FSTNode.FOLDER
@@ -174,96 +245,60 @@ class FSTNode(object):
         return self.type == FSTNode.FILE
 
     def is_root(self) -> bool:
-        return self.type == FSTNode.FOLDER and self.name == "root" and self.parent == None
+        return self.type == FSTNode.FOLDER and self.name == "files" and self.parent == None
 
     def _collect_size(self, size: int) -> int:
         for node in self.children:
-            if node._get_excluded() is True or self._get_location() is not None:
+            if node._exclude:
                 continue
 
             if node.is_file():
-                alignment = node._get_alignment()
-                size = align_int(size, alignment)
                 size += node.size
+            else:
+                size = node._collect_size(size)
 
-            size = node._collect_size(size)
+        return size
 
-        return align_int(size, 4)
+    def __eq__(self, other: FSTNode) -> bool:
+        return self.name == other.name and self.type == other.name
 
-    def _get_greatest_alignment(self) -> int:
-        root = self.rootnode
-        return sorted(root._alignmentTable.values(), reverse=True)[0]
+    def __ne__(self, other: FSTNode) -> bool:
+        return self.name != other.name or self.type != other.name
 
-    def _get_alignment(self) -> int:
-        root = self.rootnode
-        if root._alignmentTable:
-            for entry in root._alignmentTable:
-                if fnmatch(str(self.path).replace(os.sep, '/').lower(), entry.strip().lower()):
-                    return root._alignmentTable[entry]
-        return 4
+    def __len__(self) -> int:
+        if self.is_file():
+            return self._filesize
+        else:
+            return self.num_children() + 1
 
-    def _get_location(self) -> int:
-        root = self.rootnode
-        if root._locationTable:
-            for entry in root._locationTable:
-                if fnmatch(str(self.path).replace(os.sep, '/').lower(), entry.strip().lower()):
-                    return root._locationTable[entry]
-        return None
+    def __bool__(self) -> bool:
+        return True
 
-    def _get_excluded(self) -> bool:
-        root = self.rootnode
-        if root._excludeTable:
-            for entry in root._excludeTable:
-                if fnmatch(str(self.path).replace(os.sep, '/').lower(), entry.strip().lower()):
+    def __contains__(self, other: [FSTNode, Path]) -> bool:
+        if isinstance(other, FSTNode):
+            for child in self.children:
+                if child == other:
                     return True
-        return False
-
-    def _get_node_info(self, node: FSTNode, counter: int, strTabSize: int) -> (int, int):
-        counter += 1
-        if counter > 1:
-            strTabSize += len(node.name) + 1
-
-        for child in node.children:
-            counter, strTabSize = self._get_node_info(child, counter, strTabSize)
-
-        return counter, strTabSize
+            return False
+        else:
+            if self.find_by_path(other):
+                return True
+            else:
+                return False
 
 
 class FSTRoot(FSTNode):
     def __init__(self):
         super().__init__("files", FSTNode.FOLDER)
-        self.entryCount = 0
         self._id = 0
 
-        self._alignmentTable = {}
-        self._locationTable = {}
-        self._excludeTable = []
-
     def __repr__(self):
-        return f"FST Root <{self.entryCount} entries>"
-
-    def __len__(self):
-        return self.entryCount
-
-    def find_by_path(self, path: Path) -> FSTNode:
-        for node in self.rfiles:
-            if node.path == path:
-                return node
+        return f"{self.__class__.__name__}<{self.num_children()} entries>"
 
     def nodes_by_offset(self, reverse: bool = False) -> FSTNode:
         filenodes = [node for node in self.rfiles]
-
         for node in sorted(filenodes, key=lambda x: x._fileoffset, reverse=reverse):
             yield node
-
-    def _init_tables(self, configPath: Path):
-        with configPath.open("r") as config:
-            data = json.load(config)
-
-        self._alignmentTable = data["alignment"]
-        self._locationTable = data["location"]
-        self._excludeTable = data["exclude"]
-
 
     def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
         if prev:
@@ -304,26 +339,10 @@ class FST(FSTRoot):
 
     def __init__(self):
         super().__init__()
-        self.root = None
-        self._curEntry = 0
-        self._strOfs = 0
-        self._dataOfs = 0
-        self._prevfile = None
-
-    def __repr__(self):
-        return f"FST Object <{self.entryCount} entries>"
 
     @property
-    def strTableOfs(self):
+    def strTableOfs(self) -> int:
         return len(self) * 0xC
-
-    def rcreate(self, path: Path, parentnode: FSTNode = None, ignoreList=[]):
-        self._init_tables(self.root / "sys" / ".config.json")
-
-        if len(self._excludeTable) > 0:
-            ignoreList.append(*self._excludeTable)
-            
-        self._load_from_path(path, parentnode, ignoreList)
 
     def print_info(self, fst=None):
         def print_tree(node: FSTNode, string: str, depth: int) -> str:
@@ -339,8 +358,6 @@ class FST(FSTRoot):
 
             return string
 
-        if fst:
-            self.load(fst)
         print(self)
         print("-"*32)
 
@@ -349,124 +366,3 @@ class FST(FSTRoot):
             string = print_tree(child, string, 0)
 
         print(string)
-
-    def load(self, fst) -> FSTNode:
-        if fst.read(1) != b"\x01":
-            raise InvalidFSTError("Invalid Root flag found")
-        elif fst.read(3) != b"\x00\x00\x00":
-            raise InvalidFSTError("Invalid Root string offset found")
-        elif fst.read(4) != b"\x00\x00\x00\x00":
-            raise InvalidFSTError("Invalid Root offset found")
-
-        self._alignmentTable = {}
-        self.entryCount = read_uint32(fst)
-
-        self._curEntry = 1
-        while self._curEntry < self.entryCount:
-            child = self._read_nodes(fst, FSTNode.empty())
-            self.add_child(child)
-
-        return self
-
-    def save(self, fst, startpos: int = 0):
-        self._init_tables(self.root / "sys" / ".config.json")
-        self.entryCount, _ = self._get_node_info(self, 0, 0)
-
-        fst.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
-        write_uint32(fst, self.entryCount)
-
-        self._curEntry = 1
-        self._strOfs = 0
-        self._dataOfs = align_int(startpos, 4)
-        for child in self.children:
-            self._write_nodes(fst, child)
-
-    def _read_nodes(self, fst, node: FSTNode) -> (FSTNode, int):
-        _type = read_ubyte(fst)
-        _nameOfs = int.from_bytes(fst.read(3), "big", signed=False)
-        _entryOfs = read_uint32(fst)
-        _size = read_uint32(fst)
-
-        _oldpos = fst.tell()
-        node.name = read_string(fst, self.strTableOfs + _nameOfs)
-        fst.seek(_oldpos)
-
-        self._curEntry += 1
-
-        if _type == FSTNode.FOLDER:
-            node.type = FSTNode.FOLDER
-            node._dirparent = _entryOfs
-            node._dirnext = _size
-
-            while self._curEntry < _size:
-                child = self._read_nodes(fst, FSTNode.empty())
-                node.add_child(child)
-        else:
-            node.type = FSTNode.FILE
-            node.size = _size
-            node._fileoffset = _entryOfs
-
-        return node
-
-    def _write_nodes(self, fst, node: FSTNode):
-        align = node._get_alignment()
-        dataOfs = node._get_location()
-
-        if not dataOfs:
-            hasManualLocation = False
-            dataOfs = self._dataOfs = align_int(self._dataOfs, align)
-        else:
-            hasManualLocation = True
-            dataOfs = align_int(dataOfs, align)
-            
-        if node.is_file():
-            if node._fileoffset == None:
-                node._fileoffset = dataOfs
-
-        node._id = self._curEntry
-
-        totalChildren, _ = self._get_node_info(node, 0, 0)
-
-        fst.write(b"\x01" if node.is_dir() else b"\x00")
-        fst.write((self._strOfs).to_bytes(3, "big", signed=False))
-        write_uint32(fst, node.parent._id if node.is_dir() else dataOfs)
-        write_uint32(fst, totalChildren +
-                     self._curEntry if node.is_dir() else node.size)
-
-        self._curEntry += 1
-
-        _oldpos = fst.tell()
-        fst.seek(self._strOfs + self.strTableOfs)
-        fst.write(node.name.encode("ascii") + b"\x00")
-        self._strOfs += len(node.name) + 1
-
-        if node.is_file() and not hasManualLocation:
-            self._dataOfs += node.size
-
-        fst.seek(_oldpos)
-
-        for child in node.children:
-            self._write_nodes(fst, child)
-
-    def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList=()):
-        for entry in path.iterdir():
-            skip = False
-            for p in ignoreList:
-                if fnmatch(entry, p):
-                    skip = True
-                    break
-            if skip:
-                continue
-
-            if entry.is_file():
-                child = FSTNode.file(entry.name)
-                child.size = entry.stat().st_size
-                if parentnode is not None:
-                    parentnode.add_child(child)
-            elif entry.is_dir():
-                child = FSTNode.folder(entry.name)
-                self._load_from_path(entry, child, ignoreList=ignoreList)
-                if parentnode is not None:
-                    parentnode.add_child(child)
-            else:
-                raise InvalidEntryError("Not a dir or file")

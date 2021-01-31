@@ -12,7 +12,7 @@ class BI2(object):
     class Country:
         JAPAN = 0
         AMERICA = 1
-        PAL = 2
+        EUROPE = 2
         KOREA = 0
 
     def __init__(self, f):

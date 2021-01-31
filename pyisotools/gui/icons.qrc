@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="icons">
+    <file alias="Disc">icons/disc.ico</file>
+    <file alias="File">icons/file.ico</file>
+    <file alias="Folder">icons/folder.ico</file>
+    <file alias="Logo">icons/pyisotools.ico</file>
+  </qresource>
+</RCC>
