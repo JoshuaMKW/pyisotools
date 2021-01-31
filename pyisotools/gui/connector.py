@@ -229,14 +229,6 @@ class Controller(QMainWindow):
     def is_from_iso(self) -> bool:
         return self._fromIso
 
-    def trim_text(self, textbox: [QLineEdit, QPlainTextEdit, QTextEdit], size):
-        if isinstance(textbox, QLineEdit):
-            textbox.setText(textbox.text()[:size])
-        elif isinstance(textbox, QTextEdit):
-            textbox.setPlainText(textbox.toPlainText()[:size])
-        elif isinstance(textbox, QPlainTextEdit):
-            textbox.setPlainText(textbox.toPlainText()[:size])
-
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_load_iso_dialog(self) -> (bool, str):
         dialog = QFileDialog(parent=self,
@@ -641,13 +633,13 @@ class Controller(QMainWindow):
         self.bnr_save_info()
 
         if not showjob:
-            if self._fromIso:
+            if self.is_from_iso():
                 self.iso.save_system_datav()
             else:
                 self.iso.save_system_data()
             return True, None
         else:
-            if self._fromIso:
+            if self.is_from_iso():
                 isoProcess = StoppableThread(target=self.iso.save_system_datav, daemon=True)
             else:
                 isoProcess = StoppableThread(target=self.iso.save_system_data, daemon=True)
@@ -663,7 +655,7 @@ class Controller(QMainWindow):
                 progressBarProcess.run()
 
             dialog = JobCompleteDialog(self)
-            if self._fromIso:
+            if self.is_from_iso():
                 dialog.setText("ISO metadata saved successfully!")
             else:
                 dialog.setText("Root information saved successfully!")
