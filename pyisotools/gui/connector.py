@@ -825,7 +825,7 @@ class Controller(QMainWindow):
         alignment = _round_up_to_power_of_2(max(4, min(alignment, 32768)))
         if item.node._alignment != alignment:
             item.node._alignment = alignment
-            self.iso.pre_calc_offsets(self.iso.MaxSize - self.iso.get_auto_blob_size())
+            self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
             self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset:X}")
         if item.node.is_dir():
             for child in item.node.children:
@@ -868,14 +868,14 @@ class Controller(QMainWindow):
         if position < 0:
             if item.node._position:
                 item.node._position = None
-                self.iso.pre_calc_offsets(self.iso.MaxSize - self.iso.get_auto_blob_size())
+                self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
                 self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset:X}")
             return True, None
         else:
             newPos = min(position, self.iso.MaxSize - 4) & -4
             if item.node._position != newPos:
                 item.node._position = newPos
-                self.iso.pre_calc_offsets(self.iso.MaxSize - self.iso.get_auto_blob_size())
+                self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
 
             self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._position:X}")
             return True, None
@@ -900,7 +900,7 @@ class Controller(QMainWindow):
                 self.bnr_reset_info()
 
         item.setDisabled(item.node._exclude)
-        self.iso.pre_calc_offsets(self.iso.MaxSize - self.iso.get_auto_blob_size())
+        self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
         self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset:X}")
 
     @staticmethod

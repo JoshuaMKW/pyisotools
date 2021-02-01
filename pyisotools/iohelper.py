@@ -58,16 +58,13 @@ def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -
     """ Reads a null terminated string from the specified address """
 
     length = 0
-    string = ""
 
     io.seek(offset)
-    while (char := io.read(1)) != b"\x00":
-        string += char.decode(encoding)
+    while io.read(1) != b"\x00" and (length < maxlen or maxlen <= 0):
         length += 1
-        if length > (maxlen-1) and maxlen != 0:
-            return string
 
-    return string
+    io.seek(offset)
+    return io.read(length).decode(encoding)
 
 def align_int(num: int, alignment: int) -> int:
     return (num + (alignment - 1)) & -alignment

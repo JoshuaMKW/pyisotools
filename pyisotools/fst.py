@@ -226,7 +226,7 @@ class FSTNode(object):
         for node in self.rdirs:
             if node._exclude and skipExcluded:
                 continue
-            
+
             if doGlob:
                 if fnmatch(node.path, _path):
                     return node
@@ -242,10 +242,13 @@ class FSTNode(object):
         self._children.pop(node.name)
         node.parent = None
 
-    def num_children(self) -> int:
+    def num_children(self, onlyActive: bool = True) -> int:
 
         def _collect_children_count(node: FSTNode, counter: int) -> int:
             for child in node.children:
+                if child._exclude and onlyActive:
+                    continue
+
                 counter = _collect_children_count(child, counter+1)
             return counter
 

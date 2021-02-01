@@ -74,7 +74,7 @@ class ISOBase(_ISOInfo):
         _size = read_uint32(fst)
 
         _oldpos = fst.tell()
-        node.name = read_string(fst, strTabOfs + _nameOfs)
+        node.name = read_string(fst, strTabOfs + _nameOfs, encoding="shift-jis")
         fst.seek(_oldpos)
 
         node._id = self._curEntry
@@ -103,43 +103,24 @@ class ISOBase(_ISOInfo):
                 if entry.match(p):
                     disable = True
 
-            self._curEntry += 1
-
             if entry.is_file():
                 child = FSTNode.file(entry.name)
+
                 if parentnode is not None:
                     parentnode.add_child(child)
 
-                child.size = entry.stat().st_size
-                
                 child._alignment = self._get_alignment(child)
                 child._position = self._get_location(child)
                 child._exclude = disable
-
-                if self._position:
-                    self._fileoffset = self._position
-                else:
-                    if not disable:
-                        self._fileoffset = self._dataOfs
-                    else:
-                        self._fileoffset = 0
-                
-                child._id = self._curEntry - 1
-
-                if not disable and not child._position:
-                    self._dataOfs += child.size
+                child.size = entry.stat().st_size
 
             elif entry.is_dir():
                 child = FSTNode.folder(entry.name)
+
                 if parentnode is not None:
                     parentnode.add_child(child)
 
-                child._id = self._curEntry - 1
-                child._exclude = disable
-
                 self._load_from_path(entry, child, ignoreList=ignoreList)
-
-                child._dirnext = len(child) + child._id
             else:
                 raise InvalidEntryError("Not a dir or file")
 
@@ -607,6 +588,7 @@ class GamecubeISO(ISOBase):
         with (self.root / "sys" / "apploader.img").open("rb") as f:
             self.apploader = Apploader(f)
 
+        self._init_tables(self.configPath)
         with self.configPath.open("r") as f:
             config = json.load(f)
 
@@ -667,33 +649,33 @@ class GamecubeISO(ISOBase):
 
     ## FST HANDLING ##
 
-    def pre_calc_offsets(self, startpos: int):
+    def pre_calc_metadata(self, startpos: int):
         """
         Pre calculates all node offsets for viewing the node locations before compile
 
         The results of this function are only valid until the FST is changed in
         a way that impacts file offsets
         """
-        def _calc_data(node: FSTNode):
-            if node._position and node.is_file():
-                node._fileoffset = align_int(node._position, node._alignment)
-                return
+        _dataOfs = align_int(startpos, 4)
+        _curEntry = 1
+        for child in self.rchildren:
+            if child.is_file() and child._position:
+                child._fileoffset = align_int(child._position, child._alignment)
+
+            if child._exclude:
+                if child.is_file():
+                    child._fileoffset = 0
+                continue
+
+            child._id = _curEntry
+            _curEntry += 1
+
+            if child.is_file():
+                child._fileoffset = align_int(_dataOfs, child._alignment)
+                _dataOfs += child.size
             else:
-                if node.is_file() and node._exclude is False:
-                    node._fileoffset = align_int(self._dataOfs, node._alignment)
-                    self._dataOfs += node.size
-                elif node._exclude:
-                    node._fileoffset = 0
-                    return
-
-            for child in node.children:
-                _calc_data(child)
-
-        self._dataOfs = align_int(startpos, 4)
-        for child in self.children:
-            _calc_data(child)
-
-        self._dataOfs = 0
+                child._dirparent = child.parent._id
+                child._dirnext = child.size + child._id
 
     def load_file_system(self, path: Path, parentnode: FSTNode = None, ignoreList=[]):
         """
@@ -707,18 +689,10 @@ class GamecubeISO(ISOBase):
         self._init_tables(self.configPath)
 
         if len(self._excludeTable) > 0:
-            ignoreList.append(*self._excludeTable)
-
-        self._curEntry = 1
-        self._strOfs = 0
-        self._dataOfs = 0
+            ignoreList.extend(self._excludeTable)
 
         self._load_from_path(path, parentnode, ignoreList)
-        self.pre_calc_offsets(self.MaxSize - self.get_auto_blob_size())
-        
-        self._curEntry = 0
-        self._strOfs = 0
-        self._dataOfs = 0
+        self.pre_calc_metadata(self.MaxSize - self.get_auto_blob_size())
 
     def load_file_systemv(self, fst):
         """
@@ -753,9 +727,9 @@ class GamecubeISO(ISOBase):
 
         if useConfig:
             self._init_tables(self.configPath)
-            self.pre_calc_offsets(self.MaxSize - self.get_auto_blob_size())
+            self.pre_calc_metadata(self.MaxSize - self.get_auto_blob_size())
         elif preCalc:
-            self.pre_calc_offsets(self.MaxSize - self.get_auto_blob_size())
+            self.pre_calc_metadata(self.MaxSize - self.get_auto_blob_size())
 
         self._rawFST.seek(0)
         self._rawFST.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
@@ -781,7 +755,7 @@ class GamecubeISO(ISOBase):
 
             _oldpos = self._rawFST.tell()
             self._rawFST.seek(_strOfs + _strTableOfs)
-            self._rawFST.write(child.name.encode("ascii") + b"\x00")
+            self._rawFST.write(child.name.encode("shift-jis") + b"\x00")
             _strOfs += len(child.name) + 1
 
             self._rawFST.seek(_oldpos)
