@@ -1,3 +1,4 @@
 dolreader
 PySide2
 pillow
+sortedcontainers

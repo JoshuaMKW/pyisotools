@@ -137,3 +137,9 @@ root/
 
 # output
 output
+
+# cx_freeze
+build.py
+
+# pyinstaller
+pyinstaller*
