@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from fnmatch import fnmatch
 from pathlib import Path
 
 
@@ -208,13 +209,30 @@ class FSTNode(object):
         else:
             return self._collect_size(0)
 
-    def find_by_path(self, path: [Path, str]) -> FSTNode:
+    def find_by_path(self, path: [Path, str], skipExcluded: bool = True) -> FSTNode:
+        _path = str(path).lower()
+        doGlob = "?" in _path or "*" in path
+
         for node in self.rfiles:
-            if node.path.lower() == str(path).lower():
-                return node
+            if node._exclude and skipExcluded:
+                continue
+
+            if doGlob:
+                if fnmatch(node.path, _path):
+                    return node
+            else:
+                if node.path.lower() == _path:
+                    return node
         for node in self.rdirs:
-            if node.path.lower() == str(path).lower():
-                return node
+            if node._exclude and skipExcluded:
+                continue
+            
+            if doGlob:
+                if fnmatch(node.path, _path):
+                    return node
+            else:
+                if node.path.lower() == _path:
+                    return node
 
     def add_child(self, node: FSTNode):
         self._children[node.name] = node

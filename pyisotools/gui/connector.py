@@ -8,6 +8,7 @@ import threading
 import time
 import traceback
 import webbrowser
+from fnmatch import fnmatch
 from pathlib import Path
 
 from PIL import Image, ImageQt
@@ -209,7 +210,7 @@ class Controller(QMainWindow):
 
     def notify_update(self, releaseInfo: ReleaseData):
         self.updater.skipCount = 60
-        
+
         dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
         updateWindow = Ui_UpdateDialog()
         updateWindow.setupUi(dialog)
@@ -429,10 +430,25 @@ class Controller(QMainWindow):
         return True, None
 
     def bnr_reset_info(self):
+        self.ui.bannerGroupBox.setEnabled(False)
+        self.ui.bannerShortNameTextBox.setPlainText("")
+        self.ui.bannerLongNameTextBox.setPlainText("")
+        self.ui.bannerShortMakerTextBox.setPlainText("")
+        self.ui.bannerLongMakerTextBox.setPlainText("")
+        self.ui.bannerDescTextBox.setPlainText("")
         self.ui.bannerLanguageComboBox.setCurrentIndex(0)
+        self.ui.bannerLanguageComboBox.setItemText(0, "")
+        self.ui.bannerVersionTextBox.setPlainText("")
+        self.ui.bannerImageView.clear()
         self.bnr_update_info()
 
     def bnr_update_info(self):
+        if not self.iso.bnr:
+            return
+
+        self.ui.bannerGroupBox.setEnabled(True)
+        self.ui.bannerLanguageComboBox.setItemText(0, "English")
+
         pixmap = ImageQt.toqpixmap(self.iso.bnr.getImage())
         pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
         ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
@@ -445,7 +461,6 @@ class Controller(QMainWindow):
             self.ui.bannerLanguageComboBox.setCurrentIndex(0)
             self.ui.bannerLanguageComboBox.setEnabled(False)
         elif self.iso.bnr.region == "NTSC-U":
-            self.ui.bannerLanguageComboBox.setItemText(0, "English")
             self.ui.bannerLanguageComboBox.setCurrentIndex(0)
             self.ui.bannerLanguageComboBox.setEnabled(False)
         else:
@@ -464,6 +479,9 @@ class Controller(QMainWindow):
             self.iso.bnr.gameDescription)
 
     def bnr_save_info(self):
+        if not self.iso.bnr:
+            return
+            
         self.iso.bnr.index = self.ui.bannerLanguageComboBox.currentIndex()
         self.iso.bnr.gameName = self.ui.bannerShortNameTextBox.toPlainText()
         self.iso.bnr.gameTitle = self.ui.bannerLongNameTextBox.toPlainText()
@@ -865,8 +883,21 @@ class Controller(QMainWindow):
     def _disable_node(self, item: FSTTreeWidget):
         if item.node._exclude:
             item.node._exclude = False
+            if len(item.node.path.split("/")) == 1 and item.node.is_file() and fnmatch(item.node.path, "*opening.bnr"):
+                if self.iso.bootinfo.countryCode == BI2.Country.JAPAN:
+                    region = 2
+                elif self.iso.bootinfo.countryCode == BI2.Country.KOREA:
+                    region = 0
+                else:
+                    region = self.iso.bootinfo.countryCode - 1
+
+                self.iso.bnr = BNR(self.iso.dataPath / item.node.path, region=region)
+                self.bnr_reset_info()
         else:
             item.node._exclude = True
+            if len(item.node.path.split("/")) == 1 and item.node.is_file() and fnmatch(item.node.path, "*opening.bnr"):
+                self.iso.bnr = None
+                self.bnr_reset_info()
 
         item.setDisabled(item.node._exclude)
         self.iso.pre_calc_offsets(self.iso.MaxSize - self.iso.get_auto_blob_size())

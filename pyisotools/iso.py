@@ -190,21 +190,36 @@ class ISOBase(_ISOInfo):
         except IndexError:
             return 4
 
-    def _get_alignment(self, node: FSTNode) -> int:
+    def _get_alignment(self, node: [FSTNode, str]) -> int:
+        if isinstance(node, FSTNode):
+            _path = node.path
+        else:
+            _path = node
+
         if self._alignmentTable:
             for entry, align in self._alignmentTable.items():
-                if fnmatch(node.path, entry.strip()):
+                if fnmatch(_path, entry.strip()):
                     return align
         return 4
 
-    def _get_location(self, node: FSTNode) -> int:
-        if self._locationTable:
-            return self._locationTable.get(node.path)
+    def _get_location(self, node: [FSTNode, str]) -> int:
+        if isinstance(node, FSTNode):
+            _path = node.path
+        else:
+            _path = node
 
-    def _get_excluded(self, node: FSTNode) -> bool:
+        if self._locationTable:
+            return self._locationTable.get(_path)
+
+    def _get_excluded(self, node: [FSTNode, str]) -> bool:
+        if isinstance(node, FSTNode):
+            _path = node.path
+        else:
+            _path = node
+
         if self._excludeTable:
             for entry in self._excludeTable:
-                if fnmatch(node.path, entry.strip()):
+                if fnmatch(_path, entry.strip()):
                     return True
         return False
 
@@ -240,12 +255,18 @@ class GamecubeISO(ISOBase):
             region = 0
         else:
             region = virtualISO.bootinfo.countryCode - 1
-        virtualISO.bnr = BNR(virtualISO.dataPath / "opening.bnr", region=region)
+
+        for f in virtualISO.dataPath.iterdir():
+            if f.is_file() and f.match("*opening.bnr"):
+                if virtualISO._get_excluded(f.name):
+                    continue
+                virtualISO.bnr = BNR(f, region=region)
+                break
 
         with (virtualISO.configPath).open("r") as f:
             config = json.load(f)
 
-        if genNewInfo:
+        if genNewInfo and virtualISO.bnr:
             virtualISO.bnr.gameName = config["name"]
             virtualISO.bnr.gameTitle = config["name"]
             virtualISO.bnr.developerName = config["author"]
@@ -264,20 +285,48 @@ class GamecubeISO(ISOBase):
         else:
             region = virtualISO.bootinfo.countryCode - 1
 
-        bnrNode = virtualISO.find_by_path(Path("opening.bnr"))
-        with iso.open("rb") as _rawISO:
-            _rawISO.seek(bnrNode._fileoffset)
-            virtualISO.bnr = BNR.from_data(_rawISO, region=region, size=bnrNode.size)
+        bnrNode = None
+        for child in virtualISO.children:
+            if child.is_file() and fnmatch(child.path, "*opening.bnr"):
+                bnrNode = child
+                break
 
-        with iso.open("rb") as _iso:
-            prev = FSTNode.file("fst.bin", None, virtualISO.bootheader.fstSize, virtualISO.bootheader.fstOffset)
-            for node in virtualISO.nodes_by_offset():
-                alignment = virtualISO._detect_alignment(node, prev)
-                if alignment > 4:
-                    virtualISO._alignmentTable[node.path] = alignment
-                prev = node
+        if bnrNode:
+            with iso.open("rb") as _rawISO:
+                _rawISO.seek(bnrNode._fileoffset)
+                virtualISO.bnr = BNR.from_data(_rawISO, region=region, size=bnrNode.size)
+        else:
+            virtualISO.bnr = None
+
+        prev = FSTNode.file("fst.bin", None, virtualISO.bootheader.fstSize, virtualISO.bootheader.fstOffset)
+        for node in virtualISO.nodes_by_offset():
+            alignment = virtualISO._detect_alignment(node, prev)
+            if alignment > 4:
+                virtualISO._alignmentTable[node.path] = alignment
+            prev = node
 
         return virtualISO
+
+    @property
+    def configPath(self) -> Path:
+        if self.root:
+            return self.root / "sys" / ".config.json"
+        else:
+            return None
+
+    @property
+    def systemPath(self) -> Path:
+        if self.root:
+            return self.root / "sys"
+        else:
+            return None
+
+    @property
+    def dataPath(self) -> Path:
+        if self.root:
+            return self.root / self.name
+        else:
+            return None
 
     @staticmethod
     def build_root(root: Path, dest: [Path, str] = None, genNewInfo: bool = False):
@@ -513,27 +562,6 @@ class GamecubeISO(ISOBase):
 
             self.progress.jobProgress += self.dol.size
 
-    @property
-    def configPath(self) -> Path:
-        if self.root:
-            return self.root / "sys" / ".config.json"
-        else:
-            return None
-
-    @property
-    def systemPath(self) -> Path:
-        if self.root:
-            return self.root / "sys"
-        else:
-            return None
-
-    @property
-    def dataPath(self) -> Path:
-        if self.root:
-            return self.root / self.name
-        else:
-            return None
-
     def get_auto_blob_size(self) -> int:
         def _collect_size(node: FSTNode, _size: int):
             for child in node.children:
@@ -765,8 +793,8 @@ class GamecubeISO(ISOBase):
         config = {"name": self.bootheader.gameName,
                   "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
                   "version": self.bootheader.version,
-                  "author": self.bnr.developerTitle,
-                  "description": self.bnr.gameDescription,
+                  "author": self.bnr.developerTitle if self.bnr else "",
+                  "description": self.bnr.gameDescription if self.bnr else "",
                   "alignment": self._alignmentTable,
                   "location": self._locationTable,
                   "exclude": [x for x in self._excludeTable]}
