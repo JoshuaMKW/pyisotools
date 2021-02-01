@@ -78,7 +78,7 @@ class GitReleaseUpdateScraper(QThread):
                 self.skipCount = 0
                 
                 info = self.get_newest_version()
-                if isinstance(info, ReleaseData) and LooseVersion(info.version) > LooseVersion(__version__):
+                if isinstance(info, ReleaseData) and LooseVersion(info.version.lstrip("v")) > LooseVersion(__version__.lstrip("v")):
                     self.updateFound.emit(info)
             else:
                 self.skipCount -= 1

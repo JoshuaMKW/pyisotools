@@ -208,18 +208,19 @@ class Controller(QMainWindow):
         event.accept()
 
     def notify_update(self, releaseInfo: ReleaseData):
+        self.updater.skipCount = 60
+        
         dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
         updateWindow = Ui_UpdateDialog()
         updateWindow.setupUi(dialog)
         dialog.setModal(True)
 
         updateWindow.updateLabel.setText(f"pyisotools {releaseInfo.version} available!")
-        updateWindow.changelogTextEdit.setHtml(releaseInfo.info)
+        updateWindow.changelogTextEdit.setHtml(str(releaseInfo.info))
 
         if dialog.exec_() == QDialog.Accepted:
             webbrowser.open_new_tab(releaseInfo.parentURL)
 
-        self.updater.skipCount = 60
 
     def is_from_iso(self) -> bool:
         return self._fromIso
