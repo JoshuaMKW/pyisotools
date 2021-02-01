@@ -4,7 +4,10 @@ import sys
 from pyisotools import __author__, __version__
 
 if len(sys.argv) == 1 or sys.argv[1].lower() == "p":
-    subprocess.Popen('pyinstaller --noconfirm --onefile --console --icon "pyisotools/gui/icons/pyisotools.ico" --name "pyisotools" --clean --add-data "pyisotools/gui/themes;themes/"  "pyisotools/__main__.py"')
+    if sys.platform == "win32":
+        subprocess.Popen('pyinstaller --noconfirm --onefile --console --icon "pyisotools/gui/icons/pyisotools.ico" --name "pyisotools" --clean --add-data "pyisotools/gui/themes;themes/"  "pyisotools/__main__.py"', shell=True)
+    else:
+        subprocess.Popen('pyinstaller --noconfirm --onefile --console --icon "pyisotools/gui/icons/pyisotools.ico" --name "pyisotools" --clean --add-data "pyisotools/gui/themes:themes/"  "pyisotools/__main__.py"', shell=True)
 elif sys.argv[1].lower() == "build":
     from cx_Freeze import setup, Executable
 
