@@ -11,8 +11,8 @@ from pyisotools.gui.mainwindow import Ui_MainWindow
 from pyisotools.gui.connector import Controller
 from pyisotools.iso import GamecubeISO
 
-if __name__ == "__main__":
-    if len(sys.argv) == 1:
+def main(_args: list = sys.argv):
+    if len(_args) == 1:
         app = QApplication()
         central = Ui_MainWindow()
         mainWindow = Controller(central)
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         parser.add_argument("--dest",
                             help="Directory (extract)/ISO (build) to store data")
 
-        args = parser.parse_args()
+        args = parser.parse_args(args=_args)
 
         src = Path(args.src).resolve()
         if args.job == "E":
@@ -46,3 +46,6 @@ if __name__ == "__main__":
             iso.build(args.dest)
         else:
             parser.print_help()
+
+if __name__ == "__main__":
+    main()

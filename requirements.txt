@@ -1,1 +1,3 @@
-.
+dolreader
+PySide2
+pillow

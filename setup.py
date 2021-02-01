@@ -5,6 +5,9 @@ import os
 with open("README.md", "r", encoding="utf-8") as fh:
     longDescription = fh.read()
 
+with open("requirements.txt", "r", encoding="utf-8") as r:
+    requires = [x for x in r]
+
 setuptools.setup(
     name='pyisotools',
     version=pyisotools.__version__,    
@@ -17,7 +20,7 @@ setuptools.setup(
     license='GNU General Public License v3.0',
     packages=setuptools.find_packages(),
     include_package_data=True,
-    install_requires=["dolreader", "PySide2", "pillow"],
+    install_requires=requires,
 
     classifiers=[
         'Development Status :: 4 - Beta',
