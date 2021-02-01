@@ -134,3 +134,6 @@ root/
 
 # test files
 .config.json
+
+# output
+output

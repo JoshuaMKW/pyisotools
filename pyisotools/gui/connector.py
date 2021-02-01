@@ -172,13 +172,8 @@ class NodeFieldDialog(QDialog):
 
 class Controller(QMainWindow):
     class Themes:
-        DARK = Path(__file__).parent / "themes" / "dark.qss"
-        LIGHT = Path(__file__).parent / "themes" / "light.qss"
-
-    class Icons:
-        FILE = Path(__file__).parent / "icons" / "file.ico"
-        FOLDER = Path(__file__).parent / "icons" / "folder.ico"
-        DISC = Path(__file__).parent / "icons" / "disc.ico"
+        DARK = resource_path(Path("themes", "dark.qss"))
+        LIGHT = resource_path(Path("themes", "light.qss"))
 
     def __init__(self, ui, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -669,7 +664,7 @@ class Controller(QMainWindow):
 
     def load_file_system(self):
         rootNode = FSTTreeWidget()
-        rootNode.setIcon(0, QIcon(str(Controller.Icons.DISC)))
+        rootNode.setIcon(0, QIcon(u":/icons/Disc"))
         rootNode.setText(0, "root")
         rootNode.node = self.iso
         self._load_fst_tree(rootNode, self.iso)
@@ -893,10 +888,10 @@ class Controller(QMainWindow):
             treeNode.node = child
 
             if child.is_dir():
-                treeNode.setIcon(0, QIcon(str(Controller.Icons.FOLDER)))
+                treeNode.setIcon(0, QIcon(u":/icons/Folder"))
                 self._load_fst_tree(treeNode, child)
             else:
-                treeNode.setIcon(0, QIcon(str(Controller.Icons.FILE)))
+                treeNode.setIcon(0, QIcon(u":/icons/File"))
 
             parent.addChild(treeNode)
 
