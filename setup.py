@@ -17,7 +17,7 @@ setuptools.setup(
     license='GNU General Public License v3.0',
     packages=setuptools.find_packages(),
     include_package_data=True,
-    install_requires=["dolreader"],
+    install_requires=["dolreader", "PySide2", "pillow"],
 
     classifiers=[
         'Development Status :: 4 - Beta',
