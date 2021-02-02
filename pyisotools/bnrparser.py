@@ -75,10 +75,12 @@ class BNR(RGB5A1):
     ImgTileHeight = ImageHeight // RGB5A1.TileHeight
 
     def __init__(self, f: Path, region: Regions = Regions.AMERICA, gameName: str = "", gameTitle: str = "", developerName: str = "", developerTitle: str = "", desc: str = "", overwrite=False):
-        self.load(f, region, gameName, gameTitle,
-                  developerName, developerTitle, desc, overwrite)
+        self._rawdata = BytesIO(b"\x00" * (0x1960 if region != BNR.Regions.EUROPE else 0x1FA0))
         self.regionID = region
         self.index = 0
+        
+        self.load(f, region, gameName, gameTitle,
+                  developerName, developerTitle, desc, overwrite)
 
     @classmethod
     def from_data(cls, obj, region: Regions = Regions.AMERICA, size: int = -1):
