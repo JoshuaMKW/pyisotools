@@ -97,7 +97,7 @@ class ISOBase(_ISOInfo):
         return node
 
     def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: tuple = ()):
-        for entry in path.iterdir():
+        for entry in sorted(path.iterdir()):
             disable = False
             for p in ignoreList:
                 if entry.match(p):
