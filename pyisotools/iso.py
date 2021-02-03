@@ -24,7 +24,6 @@ from pyisotools.iohelper import (align_int, read_string, read_ubyte,
 class FileSystemTooLargeError(Exception):
     pass
 
-
 class _Progress(object):
     def __init__(self):
         self.jobProgress = 0
@@ -95,34 +94,6 @@ class ISOBase(_ISOInfo):
             node._fileoffset = _entryOfs
 
         return node
-
-    def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: tuple = ()):
-        for entry in sorted(path.iterdir(), key=lambda x: str(x).lower()):
-            disable = False
-            for p in ignoreList:
-                if entry.match(p):
-                    disable = True
-
-            if entry.is_file():
-                child = FSTNode.file(entry.name)
-
-                if parentnode is not None:
-                    parentnode.add_child(child)
-
-                child._alignment = self._get_alignment(child)
-                child._position = self._get_location(child)
-                child._exclude = disable
-                child.size = entry.stat().st_size
-
-            elif entry.is_dir():
-                child = FSTNode.folder(entry.name)
-
-                if parentnode is not None:
-                    parentnode.add_child(child)
-
-                self._load_from_path(entry, child, ignoreList=ignoreList)
-            else:
-                raise InvalidEntryError("Not a dir or file")
 
     def _init_tables(self, configPath: Path = None):
         if configPath and configPath.is_file():
@@ -244,15 +215,16 @@ class GamecubeISO(ISOBase):
                 virtualISO.bnr = BNR(f, region=region)
                 break
 
-        with (virtualISO.configPath).open("r") as f:
-            config = json.load(f)
+        if virtualISO.configPath and genNewInfo and virtualISO.bnr:
+            with (virtualISO.configPath).open("r") as f:
+                config = json.load(f)
 
-        if genNewInfo and virtualISO.bnr:
-            virtualISO.bnr.gameName = config["name"]
-            virtualISO.bnr.gameTitle = config["name"]
-            virtualISO.bnr.developerName = config["author"]
-            virtualISO.bnr.developerTitle = config["author"]
-            virtualISO.bnr.gameDescription = config["description"]
+            if genNewInfo and virtualISO.bnr:
+                virtualISO.bnr.gameName = config["name"]
+                virtualISO.bnr.gameTitle = config["name"]
+                virtualISO.bnr.developerName = config["author"]
+                virtualISO.bnr.developerTitle = config["author"]
+                virtualISO.bnr.gameDescription = config["description"]
 
         return virtualISO
 
@@ -279,7 +251,7 @@ class GamecubeISO(ISOBase):
         else:
             virtualISO.bnr = None
 
-        prev = FSTNode.file("fst.bin", None, virtualISO.bootheader.fstSize, virtualISO.bootheader.fstOffset)
+        prev = FSTNode.file("", None, virtualISO.bootheader.fstSize, virtualISO.bootheader.fstOffset)
         for node in virtualISO.nodes_by_offset():
             alignment = virtualISO._detect_alignment(node, prev)
             if alignment > 4:
@@ -291,23 +263,27 @@ class GamecubeISO(ISOBase):
     @property
     def configPath(self) -> Path:
         if self.root:
-            return self.root / "sys" / ".config.json"
+            return self.systemPath / ".config.json"
         else:
             return None
 
     @property
     def systemPath(self) -> Path:
         if self.root:
-            return self.root / "sys"
-        else:
-            return None
+            if self.is_dolphin_root():
+                return self.root / "sys"
+            elif self.is_gcr_root():
+                return self.root / "&&systemdata"
+        return None
 
     @property
     def dataPath(self) -> Path:
         if self.root:
-            return self.root / self.name
-        else:
-            return None
+            if self.is_dolphin_root():
+                return self.root / self.name
+            elif self.is_gcr_root():
+                return self.root
+        return None
 
     @staticmethod
     def build_root(root: Path, dest: [Path, str] = None, genNewInfo: bool = False):
@@ -318,6 +294,20 @@ class GamecubeISO(ISOBase):
     def extract_from(iso: Path, dest: [Path, str] = None):
         virtualISO = GamecubeISO.from_iso(iso)
         virtualISO.extract(dest)
+
+    def is_dolphin_root(self) -> Path:
+        if self.root:
+            folders = [x.name.lower() for x in self.root.iterdir() if x.is_dir()]
+            return "sys" in folders and "files" in folders and "&&systemdata" not in folders
+        else:
+            return False
+
+    def is_gcr_root(self) -> Path:
+        if self.root:
+            folders = [x.name.lower() for x in self.root.iterdir() if x.is_dir()]
+            return "&&systemdata" in folders
+        else:
+            return False
 
     def build(self, dest: [Path, str] = None, preCalc: bool = True):
         self.progress.set_ready(False)
@@ -342,17 +332,30 @@ class GamecubeISO(ISOBase):
         self.bootheader.fstSize = len(self._rawFST.getbuffer())
         self.bootheader.fstMaxSize = self.bootheader.fstSize
 
-        with (self.systemPath / "boot.bin").open("wb") as boot:
-            self.bootheader.save(boot)
+        if self.is_dolphin_root():
+            with (self.systemPath / "boot.bin").open("wb") as boot:
+                self.bootheader.save(boot)
 
-        with (self.systemPath / "bi2.bin").open("wb") as bi2:
-            self.bootinfo.save(bi2)
+            with (self.systemPath / "bi2.bin").open("wb") as bi2:
+                self.bootinfo.save(bi2)
 
-        with (self.systemPath / "apploader.img").open("wb") as appldr:
-            self.apploader.save(appldr)
+            with (self.systemPath / "apploader.img").open("wb") as appldr:
+                self.apploader.save(appldr)
 
-        with (self.systemPath / "fst.bin").open("wb") as fst:
-            fst.write(self._rawFST.getvalue())
+            with (self.systemPath / "fst.bin").open("wb") as fst:
+                fst.write(self._rawFST.getvalue())
+        elif self.is_gcr_root():
+            with (self.systemPath / "ISO.hdr").open("wb") as boot:
+                self.bootheader.save(boot)
+                self.bootinfo.save(bi2)
+
+            with (self.systemPath / "AppLoader.ldr").open("wb") as appldr:
+                self.apploader.save(appldr)
+
+            with (self.systemPath / "Game.toc").open("wb") as fst: 
+                fst.write(self._rawFST.getvalue())
+        else:
+            raise InvalidFSTError(f"{self.root} is not a valid root folder")
 
         with self.isoPath.open("wb") as ISO:
             self.bootheader.save(ISO)
@@ -377,8 +380,7 @@ class GamecubeISO(ISOBase):
                 if child.is_file() and not self._get_excluded(child):
                     ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
                     ISO.seek(child._fileoffset)
-                    ISO.write((self.root / self.name /
-                               child.path).read_bytes())
+                    ISO.write((self.dataPath / child.path).read_bytes())
                     ISO.seek(0, 2)
                     self.progress.jobProgress += child.size
 
@@ -576,23 +578,34 @@ class GamecubeISO(ISOBase):
     def init_from_root(self, root: Path, genNewInfo: bool = False):
         self.root = root
 
-        with (self.root / "sys" / "main.dol").open("rb") as _dol:
-            self.dol = DolFile(_dol)
+        if self.is_dolphin_root():
+            with (self.systemPath / "main.dol").open("rb") as _dol:
+                self.dol = DolFile(_dol)
 
-        with (self.root / "sys" / "boot.bin").open("rb") as f:
-            self.bootheader = Boot(f)
+            with (self.systemPath / "boot.bin").open("rb") as f:
+                self.bootheader = Boot(f)
 
-        with (self.root / "sys" / "bi2.bin").open("rb") as f:
-            self.bootinfo = BI2(f)
+            with (self.systemPath / "bi2.bin").open("rb") as f:
+                self.bootinfo = BI2(f)
 
-        with (self.root / "sys" / "apploader.img").open("rb") as f:
-            self.apploader = Apploader(f)
+            with (self.systemPath / "apploader.img").open("rb") as f:
+                self.apploader = Apploader(f)
+        elif self.is_gcr_root():
+            with (self.root / "&&systemdata" / "Start.dol").open("rb") as _dol:
+                self.dol = DolFile(_dol)
+
+            with (self.root / "&&systemdata" / "ISO.hdr").open("rb") as f:
+                self.bootheader = Boot(f)
+                self.bootinfo = BI2(f)
+
+            with (self.root / "&&systemdata" / "Apploader.ldr").open("rb") as f:
+                self.apploader = Apploader(f)
 
         self._init_tables(self.configPath)
-        with self.configPath.open("r") as f:
-            config = json.load(f)
-
-        if genNewInfo:
+        if self.configPath.is_file() and genNewInfo:
+            with self.configPath.open("r") as f:
+                config = json.load(f)
+                
             self.bootheader.gameName = config["name"]
             self.bootheader.gameCode = config["gameid"][:4]
             self.bootheader.makerCode = config["gameid"][4:6]
@@ -608,8 +621,7 @@ class GamecubeISO(ISOBase):
             self.bootheader.dolOffset + self.dol.size + 0x7FF) & -0x800
 
         self._rawFST = BytesIO()
-        self.load_file_system(self.root / self.name,
-                              self, ignoreList=[])
+        self.load_file_system(self.dataPath, self, ignoreList=[])
 
         self.bootheader.fstSize = len(self._rawFST.getbuffer())
         self.bootheader.fstMaxSize = self.bootheader.fstSize
@@ -775,6 +787,37 @@ class GamecubeISO(ISOBase):
 
         with self.configPath.open("w") as f:
             json.dump(config, f, indent=4)
+
+    def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: tuple = ()):
+        for entry in sorted(path.iterdir(), key=lambda x: str(x).lower()):
+            if self.is_gcr_root() and entry.name.lower() == "&&systemdata":
+                continue
+
+            disable = False
+            for p in ignoreList:
+                if entry.match(p):
+                    disable = True
+
+            if entry.is_file():
+                child = FSTNode.file(entry.name)
+
+                if parentnode is not None:
+                    parentnode.add_child(child)
+
+                child._alignment = self._get_alignment(child)
+                child._position = self._get_location(child)
+                child._exclude = disable
+                child.size = entry.stat().st_size
+
+            elif entry.is_dir():
+                child = FSTNode.folder(entry.name)
+
+                if parentnode is not None:
+                    parentnode.add_child(child)
+
+                self._load_from_path(entry, child, ignoreList=ignoreList)
+            else:
+                raise InvalidEntryError("Not a dir or file")
 
     def _save_config_regen(self):
         self._alignmentTable.clear()

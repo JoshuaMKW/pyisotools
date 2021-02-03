@@ -710,7 +710,7 @@ class Controller(QMainWindow):
             if item.node.is_root():
                 path = self.iso.root
             else:
-                path = self.iso.root / self.iso.name / item.node.path
+                path = self.iso.dataPath / item.node.path
 
             viewAction = QAction("Open Path in Explorer", self.ui.fileSystemTreeWidget)
             viewAction.triggered.connect(lambda clicked=None, x=path: self._open_path_in_explorer(x))
