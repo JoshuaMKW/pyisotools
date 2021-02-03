@@ -291,7 +291,12 @@ class Controller(QMainWindow):
         else:
             return False, "The file does not exist!"
 
-        self.setWindowTitle(f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (root)")
+        if self.iso.is_dolphin_root():
+            self.setWindowTitle(f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (root)")
+        elif self.iso.is_gcr_root():
+            self.setWindowTitle(f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (GCR root)")
+        else:
+            return False, f"{self.rootPath} is not a valid root folder!"
 
         return True, None
 
@@ -327,7 +332,7 @@ class Controller(QMainWindow):
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def iso_extract_dialog(self) -> (bool, str):
+    def iso_extract_dialog(self, dumpPositions: bool = False) -> (bool, str):
         dialog = QFileDialog(parent=self,
                              caption="Extract ISO To...",
                              directory=str(self.extractPath.parent if self.extractPath else Path.home()))
@@ -341,7 +346,7 @@ class Controller(QMainWindow):
 
         self.save_all(False)
 
-        isoProcess = StoppableThread(target=self.iso.extract, args=(self.extractPath,), daemon=True)
+        isoProcess = StoppableThread(target=self.iso.extract, args=(self.extractPath, dumpPositions), daemon=True)
         progressBarProcess = ProgressHandler(self, isoProcess, self)
 
         isoProcess.start()
@@ -732,9 +737,12 @@ class Controller(QMainWindow):
             if item.node.is_root():
                 extractAction = QAction(f"Extract ISO To...", self.ui.fileSystemTreeWidget)
                 extractAction.triggered.connect(self.iso_extract_dialog)
+                extractWithPosAction = QAction(f"Extract ISO With Positions To...", self.ui.fileSystemTreeWidget)
+                extractWithPosAction.triggered.connect(lambda x: self.iso_extract_dialog(True))
                 sysExtractAction = QAction(f"Extract System Data To...", self.ui.fileSystemTreeWidget)
                 sysExtractAction.triggered.connect(self.iso_extract_system_dialog)
                 menu.addAction(extractAction)
+                menu.addAction(extractWithPosAction)
                 menu.addAction(sysExtractAction)
             else:
                 extractAction = QAction(f"Extract \"{item.text(0)}\" To...", self.ui.fileSystemTreeWidget)

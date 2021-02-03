@@ -255,7 +255,7 @@ class GamecubeISO(ISOBase):
         for node in virtualISO.nodes_by_offset():
             alignment = virtualISO._detect_alignment(node, prev)
             if alignment > 4:
-                virtualISO._alignmentTable[node.path] = alignment
+                virtualISO._alignmentTable[node.path.lower()] = alignment
             prev = node
 
         return virtualISO
@@ -270,19 +270,19 @@ class GamecubeISO(ISOBase):
     @property
     def systemPath(self) -> Path:
         if self.root:
-            if self.is_dolphin_root():
-                return self.root / "sys"
-            elif self.is_gcr_root():
+            if self.is_gcr_root():
                 return self.root / "&&systemdata"
+            else:
+                return self.root / "sys"
         return None
 
     @property
     def dataPath(self) -> Path:
         if self.root:
-            if self.is_dolphin_root():
-                return self.root / self.name
-            elif self.is_gcr_root():
+            if self.is_gcr_root():
                 return self.root
+            else:
+                return self.root / self.name
         return None
 
     @staticmethod
@@ -387,7 +387,7 @@ class GamecubeISO(ISOBase):
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
             self.progress.jobProgress = self.MaxSize
 
-    def extract(self, dest: [Path, str] = None):
+    def extract(self, dest: [Path, str] = None, dumpPositions: bool = True):
         self.progress.set_ready(False)
         self.progress.jobProgress = 0
 
@@ -402,8 +402,8 @@ class GamecubeISO(ISOBase):
         if dest is not None:
             self.root = Path(f"{dest}/root")
 
-        systemPath = self.systemPath
         self.root.mkdir(parents=True, exist_ok=True)
+        systemPath = self.systemPath
         systemPath.mkdir(exist_ok=True)
 
         with (systemPath / "boot.bin").open("wb") as f:
@@ -430,7 +430,6 @@ class GamecubeISO(ISOBase):
             f.write(self._rawFST.getvalue())
 
         self.progress.jobProgress += len(self._rawFST.getbuffer())
-        self.save_config()
 
         self.dataPath.mkdir(parents=True, exist_ok=True)
         with self.isoPath.open("rb") as _iso:
@@ -441,9 +440,12 @@ class GamecubeISO(ISOBase):
                         _iso.seek(child._fileoffset)
                         f.write(_iso.read(child.size))
                         self.progress.jobProgress += child.size
+                    if dumpPositions:
+                        self._locationTable[child.path.lower()] = child._fileoffset
                 else:
                     _dest.mkdir(exist_ok=True)
 
+        self.save_config()
         self.progress.jobProgress = self.progress.jobSize
 
     def extract_system_data(self, dest: [Path, str] = None):
@@ -827,9 +829,9 @@ class GamecubeISO(ISOBase):
         for node in self.rchildren:
             if node.is_file():
                 if node._alignment > 4:
-                    self._alignmentTable[node.path] = node._alignment
+                    self._alignmentTable[node.path.lower()] = node._alignment
                 if node._position:
-                    self._locationTable[node.path] = node._position
+                    self._locationTable[node.path.lower()] = node._position
             if node._exclude:
                 self._excludeTable.add(node.path)
 
