@@ -161,7 +161,7 @@ class ISOBase(_ISOInfo):
             _path = node
 
         if self._locationTable:
-            return self._locationTable.get(_path)
+            return self._locationTable.get(_path.lower())
 
     def _get_excluded(self, node: [FSTNode, str]) -> bool:
         if isinstance(node, FSTNode):
