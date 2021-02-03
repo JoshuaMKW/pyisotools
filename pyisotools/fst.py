@@ -178,7 +178,7 @@ class FSTNode(object):
 
     @property
     def children(self):
-        for child in sorted(self._children.values(), key=lambda x: x.name.lower()):
+        for child in sorted(self._children.values(), key=lambda x: x.name.upper()):
             yield child
 
     @property

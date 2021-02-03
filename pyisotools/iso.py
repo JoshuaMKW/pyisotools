@@ -7,9 +7,9 @@ from datetime import datetime
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
-from sortedcontainers import SortedDict, SortedList
 
 from dolreader.dol import DolFile
+from sortedcontainers import SortedDict, SortedList
 
 from pyisotools.apploader import Apploader
 from pyisotools.bi2 import BI2
@@ -161,7 +161,7 @@ class ISOBase(_ISOInfo):
             _path = node
 
         if self._locationTable:
-            return self._locationTable.get(_path.lower())
+            return self._locationTable.get(_path)
 
     def _get_excluded(self, node: [FSTNode, str]) -> bool:
         if isinstance(node, FSTNode):
@@ -197,9 +197,9 @@ class GamecubeISO(ISOBase):
         virtualISO = cls()
         virtualISO.init_from_root(root, genNewInfo)
 
-        if ((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x7FF) & -0x800) + virtualISO.datasize > virtualISO.MaxSize:
+        if ((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x3) & -0x4) + virtualISO.datasize > virtualISO.MaxSize:
             raise FileSystemTooLargeError(
-                f"{((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x7FF) & -0x800) + virtualISO.datasize} is larger than the max size of a GCM ({virtualISO.MaxSize})")
+                f"{((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x3) & -0x4) + virtualISO.datasize} is larger than the max size of a GCM ({virtualISO.MaxSize})")
 
         if virtualISO.bootinfo.countryCode == BI2.Country.JAPAN:
             region = 2
@@ -255,7 +255,7 @@ class GamecubeISO(ISOBase):
         for node in virtualISO.nodes_by_offset():
             alignment = virtualISO._detect_alignment(node, prev)
             if alignment > 4:
-                virtualISO._alignmentTable[node.path.lower()] = alignment
+                virtualISO._alignmentTable[node.path] = alignment
             prev = node
 
         return virtualISO
@@ -441,7 +441,7 @@ class GamecubeISO(ISOBase):
                         f.write(_iso.read(child.size))
                         self.progress.jobProgress += child.size
                     if dumpPositions:
-                        self._locationTable[child.path.lower()] = child._fileoffset
+                        self._locationTable[child.path] = child._fileoffset
                 else:
                     _dest.mkdir(exist_ok=True)
 
@@ -620,7 +620,7 @@ class GamecubeISO(ISOBase):
         self.bootheader.dolOffset = (
             0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
         self.bootheader.fstOffset = (
-            self.bootheader.dolOffset + self.dol.size + 0x7FF) & -0x800
+            self.bootheader.dolOffset + self.dol.size + 0x3) & -0x4
 
         self._rawFST = BytesIO()
         self.load_file_system(self.dataPath, self, ignoreList=[])
@@ -685,8 +685,9 @@ class GamecubeISO(ISOBase):
             _curEntry += 1
 
             if child.is_file():
-                child._fileoffset = align_int(_dataOfs, child._alignment)
-                _dataOfs += child.size
+                if not child._position:
+                    child._fileoffset = align_int(_dataOfs, child._alignment)
+                    _dataOfs += child.size
             else:
                 child._dirparent = child.parent._id
                 child._dirnext = child.size + child._id
@@ -784,14 +785,14 @@ class GamecubeISO(ISOBase):
                   "author": self.bnr.developerTitle if self.bnr else "",
                   "description": self.bnr.gameDescription if self.bnr else "",
                   "alignment": self._alignmentTable,
-                  "location": self._locationTable,
+                  "location": {k : self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
                   "exclude": [x for x in self._excludeTable]}
 
         with self.configPath.open("w") as f:
             json.dump(config, f, indent=4)
 
     def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: tuple = ()):
-        for entry in sorted(path.iterdir(), key=lambda x: str(x).lower()):
+        for entry in sorted(path.iterdir(), key=lambda x: x.name.upper()):
             if self.is_gcr_root() and entry.name.lower() == "&&systemdata":
                 continue
 
@@ -829,9 +830,9 @@ class GamecubeISO(ISOBase):
         for node in self.rchildren:
             if node.is_file():
                 if node._alignment > 4:
-                    self._alignmentTable[node.path.lower()] = node._alignment
+                    self._alignmentTable[node.path] = node._alignment
                 if node._position:
-                    self._locationTable[node.path.lower()] = node._position
+                    self._locationTable[node.path] = node._position
             if node._exclude:
                 self._excludeTable.add(node.path)
 
