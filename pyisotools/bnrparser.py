@@ -42,11 +42,7 @@ class RGB5A1(object):
         r = (pixel[0] >> 3) & 0b11111
         g = (pixel[1] >> 3) & 0b11111
         b = (pixel[2] >> 3) & 0b11111
-
-        if len(pixel) == 3:
-            a = 1
-        else:
-            a = 1 if pixel[3] & 0x80 else 0
+        a = 1
 
         return (a << 15) | (r << 10) | (g << 5) | b
 
@@ -56,12 +52,43 @@ class RGB5A1(object):
         r = ((pixel >> 10) & 0b11111) << 3
         g = ((pixel >> 5) & 0b11111) << 3
         b = (pixel & 0b11111) << 3
-        a = (pixel >> 15) * 0xFF
+        a = 0xFF
 
         return (r, g, b, a)
 
 
-class BNR(RGB5A1):
+class RGB5A3(object):
+
+    TileWidth = 4
+    TileHeight = 4
+
+    @staticmethod
+    def encode_pixel(pixel: tuple) -> int:
+        """ RGB888 or RGBA8888 ONLY """
+        r = (pixel[0] >> 4) & 0b1111
+        g = (pixel[1] >> 4) & 0b1111
+        b = (pixel[2] >> 4) & 0b1111
+        if len(pixel) == 3:
+            a = 0b111
+        else:
+            a = (pixel[3] >> 5) & 0b111
+
+        return (a << 12) | (r << 8) | (g << 4) | b
+
+    @staticmethod
+    def decode_pixel(pixel: int) -> tuple:
+        """ RGBA8888 ONLY """
+        r = ((pixel >> 8) & 0b1111) << 4
+        g = ((pixel >> 4) & 0b1111) << 4
+        b = (pixel & 0b1111) << 4
+        a = ((pixel >> 12) & 0b111) << 5
+
+        print(hex(pixel), f"({r:X}, {g:X}, {b:X}, {a:X})")
+
+        return (r, g, b, a)
+
+
+class BNR(RGB5A3):
     class Regions:
         AMERICA = 0
         EUROPE = 1
@@ -146,7 +173,7 @@ class BNR(RGB5A1):
 
                             pixel = smallImg.getpixel((x, y))
                             if x < BNR.ImageWidth and y < BNR.ImageHeight:
-                                self._rawdata.write(self.encode_pixel(
+                                self._rawdata.write(self._encode_pixel(
                                     pixel).to_bytes(2, "big", signed=False))
 
     @property
@@ -228,7 +255,8 @@ class BNR(RGB5A1):
                         pixel = int.from_bytes(
                             _image.read(2), "big", signed=False)
                         if x < BNR.ImageWidth and y < BNR.ImageHeight:
-                            img.putpixel((x, y), self.decode_pixel(pixel))
+                            print(self._decode_pixel(pixel))
+                            img.putpixel((x, y), self._decode_pixel(pixel))
 
         return img
 
@@ -284,6 +312,18 @@ class BNR(RGB5A1):
             self.magic = region
 
             self.rawImage = Image.open(f)
+
+    def _encode_pixel(self, pixel: tuple):
+        if len(pixel) == 3:
+            return RGB5A1.encode_pixel(pixel)
+        else:
+            return RGB5A3.encode_pixel(pixel)
+
+    def _decode_pixel(self, pixel: int):
+        if (pixel >> 15) & 1:
+            return RGB5A1.decode_pixel(pixel)
+        else:
+            return RGB5A3.decode_pixel(pixel)
 
 
 if __name__ == "__main__":
