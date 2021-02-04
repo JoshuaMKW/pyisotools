@@ -83,8 +83,6 @@ class RGB5A3(object):
         b = (pixel & 0b1111) << 4
         a = ((pixel >> 12) & 0b111) << 5
 
-        print(hex(pixel), f"({r:X}, {g:X}, {b:X}, {a:X})")
-
         return (r, g, b, a)
 
 
