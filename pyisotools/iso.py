@@ -672,9 +672,12 @@ class GamecubeISO(ISOBase):
         """
         _dataOfs = align_int(startpos, 4)
         _curEntry = 1
+        _minOffset = self.MaxSize - 4
         for child in self.rchildren:
             if child.is_file() and child._position:
                 child._fileoffset = align_int(child._position, child._alignment)
+                if child._fileoffset < _minOffset:
+                    _minOffset = child._fileoffset
 
             if child._exclude:
                 if child.is_file():
@@ -687,10 +690,15 @@ class GamecubeISO(ISOBase):
             if child.is_file():
                 if not child._position:
                     child._fileoffset = align_int(_dataOfs, child._alignment)
+                    if child._fileoffset < _minOffset:
+                        _minOffset = child._fileoffset
+
                     _dataOfs += child.size
             else:
                 child._dirparent = child.parent._id
                 child._dirnext = child.size + child._id
+
+        self.bootheader.firstFileOffset = _dataOfs
 
     def load_file_system(self, path: Path, parentnode: FSTNode = None, ignoreList=[]):
         """

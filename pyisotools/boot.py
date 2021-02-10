@@ -189,12 +189,12 @@ class Boot(object):
         write_uint32(self._rawdata, addr)
 
     @property
-    def userSize(self) -> int:
+    def firstFileOffset(self) -> int:
         self._rawdata.seek(0x434)
         return read_uint32(self._rawdata)
 
-    @userSize.setter
-    def userSize(self, size: int):
+    @firstFileOffset.setter
+    def firstFileOffset(self, size: int):
         self._rawdata.seek(0x434)
         write_uint32(self._rawdata, size)
 
