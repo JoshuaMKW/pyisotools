@@ -698,7 +698,7 @@ class GamecubeISO(ISOBase):
                 child._dirparent = child.parent._id
                 child._dirnext = child.size + child._id
 
-        self.bootheader.firstFileOffset = _dataOfs
+        self.bootheader.firstFileOffset = max(_minOffset, 0)
 
     def load_file_system(self, path: Path, parentnode: FSTNode = None, ignoreList=[]):
         """

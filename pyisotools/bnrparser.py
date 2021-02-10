@@ -253,7 +253,6 @@ class BNR(RGB5A3):
                         pixel = int.from_bytes(
                             _image.read(2), "big", signed=False)
                         if x < BNR.ImageWidth and y < BNR.ImageHeight:
-                            print(self._decode_pixel(pixel))
                             img.putpixel((x, y), self._decode_pixel(pixel))
 
         return img
