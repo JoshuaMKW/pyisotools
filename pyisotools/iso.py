@@ -140,7 +140,7 @@ class ISOBase(_ISOInfo):
         try:
             return self._alignmentTable.peekitem()[1]
         except IndexError:
-            return 4
+            return 32
 
     def _get_alignment(self, node: [FSTNode, str]) -> int:
         if isinstance(node, FSTNode):
@@ -152,7 +152,7 @@ class ISOBase(_ISOInfo):
             for entry, align in self._alignmentTable.items():
                 if fnmatch(_path, entry.strip()):
                     return align
-        return 4
+        return 32
 
     def _get_location(self, node: [FSTNode, str]) -> int:
         if isinstance(node, FSTNode):
@@ -254,7 +254,7 @@ class GamecubeISO(ISOBase):
         prev = FSTNode.file("", None, virtualISO.bootheader.fstSize, virtualISO.bootheader.fstOffset)
         for node in virtualISO.nodes_by_offset():
             alignment = virtualISO._detect_alignment(node, prev)
-            if alignment > 4:
+            if alignment != 32:
                 virtualISO._alignmentTable[node.path] = alignment
             prev = node
 
@@ -837,7 +837,7 @@ class GamecubeISO(ISOBase):
 
         for node in self.rchildren:
             if node.is_file():
-                if node._alignment > 4:
+                if node._alignment != 32:
                     self._alignmentTable[node.path] = node._alignment
                 if node._position:
                     self._locationTable[node.path] = node._position

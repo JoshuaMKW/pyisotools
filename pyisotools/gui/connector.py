@@ -812,7 +812,7 @@ class Controller(QMainWindow):
         if item.node._alignment:
             window.plainTextEdit.setPlainText(str(item.node._alignment))
         else:
-            window.plainTextEdit.setPlainText("4")
+            window.plainTextEdit.setPlainText("32")
 
         dialog.show()
         if dialog.exec_() != QFileDialog.Accepted:
@@ -831,13 +831,14 @@ class Controller(QMainWindow):
             return False, dialog
 
         alignment = _round_up_to_power_of_2(max(4, min(alignment, 32768)))
-        if item.node._alignment != alignment:
+        if item.node.is_file() and item.node._alignment != alignment:
             item.node._alignment = alignment
             self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
             self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset:X}")
         if item.node.is_dir():
-            for child in item.node.children:
+            for child in item.node.rchildren:
                 child._alignment = _round_up_to_power_of_2(alignment)
+            self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
 
         return True, None
 
