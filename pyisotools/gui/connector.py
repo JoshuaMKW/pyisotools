@@ -812,7 +812,7 @@ class Controller(QMainWindow):
         if item.node._alignment:
             window.plainTextEdit.setPlainText(str(item.node._alignment))
         else:
-            window.plainTextEdit.setPlainText("32")
+            window.plainTextEdit.setPlainText("4")
 
         dialog.show()
         if dialog.exec_() != QFileDialog.Accepted:

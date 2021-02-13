@@ -52,8 +52,8 @@ class FSTNode(object):
         self._dirparent = None
         self._dirnext = None
 
-        self._children = {}
         self._parent = None
+        self._children = {}
         self._id = nodeid
 
         # setup
@@ -79,23 +79,18 @@ class FSTNode(object):
         return node
 
     @classmethod
-    def folder(cls, name: str, parent: FSTNode = None, children: list = ()):
+    def folder(cls, name: str, parent: FSTNode = None, children: tuple = ()):
         return cls(name, FSTNode.FOLDER, parent=parent, children=children)
 
     @classmethod
     def from_path(cls, path: Path) -> FSTNode:
         if path.is_file():
-            node = cls.file(path.name)
-            node.size = path.stat().st_size()
+            node = cls.file(path.name, size=path.stat().st_size())
         elif path.is_dir():
-            node = cls.folder(path.name)
-            for f in path.iterdir():
-                child = cls.from_path(f)
-                node.add_child(child)
+            node = cls.folder(path.name, children=[cls.from_path(f) for f in path.iterdir()])
         else:
             raise NotImplementedError(
                 "Initializing a node using anything other than a file or folder is not allowed")
-
         return node
 
     @classmethod
@@ -154,7 +149,7 @@ class FSTNode(object):
 
     @parent.setter
     def parent(self, node: FSTNode):
-        if self.parent is not None:
+        if self._parent is not None:
             if self.is_dir():
                 if node is not None:
                     diff = node._id - self._dirparent
@@ -163,8 +158,8 @@ class FSTNode(object):
                     diff = -self._dirparent
                     self._dirparent = 0
                 for child in node.children:
-                    child.id += diff
-            self.parent.remove_child(self)
+                    child._id += diff
+            self._parent.remove_child(self)
         else:
             if node is not None:
                 self._dirparent = node._id
@@ -207,7 +202,11 @@ class FSTNode(object):
         if self.is_file():
             return self._filesize
         else:
-            return self._collect_size(0)
+            for node in self.rfiles:
+                if node._exclude:
+                    continue
+                size += node.size
+            return size
 
     def find_by_path(self, path: [Path, str], skipExcluded: bool = True) -> FSTNode:
         _path = str(path).lower()
@@ -243,16 +242,12 @@ class FSTNode(object):
         node.parent = None
 
     def num_children(self, onlyActive: bool = True) -> int:
-
-        def _collect_children_count(node: FSTNode, counter: int) -> int:
-            for child in node.children:
-                if child._exclude and onlyActive:
-                    continue
-
-                counter = _collect_children_count(child, counter+1)
-            return counter
-
-        return _collect_children_count(self, 0)
+        counter = 0
+        for child in self.rchildren:
+            if child._exclude and onlyActive:
+                continue
+            counter += 1
+        return counter
 
     def destroy(self):
         self.parent = None
@@ -268,23 +263,11 @@ class FSTNode(object):
     def is_root(self) -> bool:
         return self.type == FSTNode.FOLDER and self.name == "files" and self.parent == None
 
-    def _collect_size(self, size: int) -> int:
-        for node in self.children:
-            if node._exclude:
-                continue
-
-            if node.is_file():
-                size += node.size
-            else:
-                size = node._collect_size(size)
-
-        return size
-
     def __eq__(self, other: FSTNode) -> bool:
-        return self.name == other.name and self.type == other.name
+        return self.name == other.name and self.type == other.type
 
     def __ne__(self, other: FSTNode) -> bool:
-        return self.name != other.name or self.type != other.name
+        return self.name != other.name or self.type != other.type
 
     def __len__(self) -> int:
         if self.is_file():
@@ -317,8 +300,7 @@ class FSTRoot(FSTNode):
         return f"{self.__class__.__name__}<{self.num_children()} entries>"
 
     def nodes_by_offset(self, reverse: bool = False) -> FSTNode:
-        filenodes = [node for node in self.rfiles]
-        for node in sorted(filenodes, key=lambda x: x._fileoffset, reverse=reverse):
+        for node in sorted(self.rfiles, key=lambda x: x._fileoffset, reverse=reverse):
             yield node
 
     def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
