@@ -122,26 +122,32 @@ class FSTNode(object):
             if node.is_file():
                 yield node
 
-    @property
-    def rdirs(self) -> FSTNode:
+    def rdirs(self, includedOnly: bool = False) -> FSTNode:
         for node in self.children:
+            if includedOnly and node._exclude:
+                continue
+            
             if node.is_dir():
                 yield node
-                yield from node.rdirs
+                yield from node.rdirs(includedOnly=includedOnly)
 
-    @property
-    def rfiles(self) -> FSTNode:
+    def rfiles(self, includedOnly: bool = False) -> FSTNode:
         for node in self.children:
+            if includedOnly and node._exclude:
+                continue
+
             if node.is_file():
                 yield node
             else:
-                yield from node.rfiles
+                yield from node.rfiles(includedOnly=includedOnly)
 
-    @property
-    def rchildren(self) -> FSTNode:
+    def rchildren(self, includedOnly: bool = False) -> FSTNode:
         for node in self.children:
+            if includedOnly and node._exclude:
+                continue
+            
             yield node
-            yield from node.rchildren
+            yield from node.rchildren(includedOnly=includedOnly)
 
     @property
     def parent(self) -> FSTNode:
@@ -202,9 +208,8 @@ class FSTNode(object):
         if self.is_file():
             return self._filesize
         else:
-            for node in self.rfiles:
-                if node._exclude:
-                    continue
+            size = 0
+            for node in self.rfiles(includedOnly=True):
                 size += node.size
             return size
 
@@ -212,20 +217,14 @@ class FSTNode(object):
         _path = str(path).lower()
         doGlob = "?" in _path or "*" in path
 
-        for node in self.rfiles:
-            if node._exclude and skipExcluded:
-                continue
-
+        for node in self.rfiles(includedOnly=skipExcluded):
             if doGlob:
                 if fnmatch(node.path, _path):
                     return node
             else:
                 if node.path.lower() == _path:
                     return node
-        for node in self.rdirs:
-            if node._exclude and skipExcluded:
-                continue
-
+        for node in self.rdirs(includedOnly=skipExcluded):
             if doGlob:
                 if fnmatch(node.path, _path):
                     return node
@@ -241,11 +240,9 @@ class FSTNode(object):
         self._children.pop(node.name)
         node.parent = None
 
-    def num_children(self, onlyActive: bool = True) -> int:
+    def num_children(self, skipExcluded: bool = True) -> int:
         counter = 0
-        for child in self.rchildren:
-            if child._exclude and onlyActive:
-                continue
+        for _ in self.rchildren(includedOnly=skipExcluded):
             counter += 1
         return counter
 

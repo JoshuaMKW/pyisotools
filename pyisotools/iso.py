@@ -326,11 +326,39 @@ class GamecubeISO(ISOBase):
 
         self.isoPath.parent.mkdir(parents=True, exist_ok=True)
 
-        self.save_file_systemv((self.MaxSize - self.get_auto_blob_size())
-                               & -self._get_greatest_alignment(), False, preCalc)
+        # --- FST --- #
+
+        if preCalc:
+            self.pre_calc_metadata((self.MaxSize - self.get_auto_blob_size()) & -self._get_greatest_alignment())
+
+        self._rawFST.seek(0)
+        self._rawFST.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
+        write_uint32(self._rawFST, len(self))
+
+        _curEntry = 1
+        _strOfs = 0
+        _strTableOfs = self.strTableOfs
+        for child in self.rchildren(includedOnly=True):
+            child._id = _curEntry
+            self._rawFST.write(b"\x01" if child.is_dir() else b"\x00")
+            self._rawFST.write((_strOfs).to_bytes(3, "big", signed=False))
+            write_uint32(self._rawFST, child.parent._id if child.is_dir() else child._fileoffset)
+            write_uint32(self._rawFST, len(child) +
+                        _curEntry if child.is_dir() else child.size)
+            _curEntry += 1
+
+            _oldpos = self._rawFST.tell()
+            self._rawFST.seek(_strOfs + _strTableOfs)
+            self._rawFST.write(child.name.encode("shift-jis") + b"\x00")
+            _strOfs += len(child.name) + 1
+            self._rawFST.seek(_oldpos)
 
         self.bootheader.fstSize = len(self._rawFST.getbuffer())
         self.bootheader.fstMaxSize = self.bootheader.fstSize
+
+        # ----------- #
+
+        # -- System -- #
 
         if self.is_dolphin_root():
             with (self.systemPath / "boot.bin").open("wb") as boot:
@@ -357,6 +385,10 @@ class GamecubeISO(ISOBase):
         else:
             raise InvalidFSTError(f"{self.root} is not a valid root folder")
 
+        # ------------ #
+
+        # -- Files -- #
+
         with self.isoPath.open("wb") as ISO:
             self.bootheader.save(ISO)
             self.progress.jobProgress += 0x440
@@ -373,19 +405,22 @@ class GamecubeISO(ISOBase):
 
             ISO.seek(ISO.tell() + self.dol.size)
             ISO.write(b"\x00" * (self.bootheader.fstOffset - ISO.tell()))
+
             ISO.write(self._rawFST.getvalue())
             self.progress.jobProgress += len(self._rawFST.getbuffer())
-
-            for child in self.rfiles:
-                if child.is_file() and not self._get_excluded(child):
-                    ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
-                    ISO.seek(child._fileoffset)
-                    ISO.write((self.dataPath / child.path).read_bytes())
-                    ISO.seek(0, 2)
-                    self.progress.jobProgress += child.size
+            
+            for child in self.rfiles(includedOnly=True):
+                ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
+                ISO.seek(child._fileoffset)
+                ISO.write((self.dataPath / child.path).read_bytes())
+                ISO.seek(0, 2)
+                self.progress.jobProgress += child.size
 
             ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
-            self.progress.jobProgress = self.MaxSize
+
+        # ----------- #
+        
+        self.progress.jobProgress = self.MaxSize
 
     def extract(self, dest: [Path, str] = None, dumpPositions: bool = True):
         self.progress.set_ready(False)
@@ -433,7 +468,7 @@ class GamecubeISO(ISOBase):
 
         self.dataPath.mkdir(parents=True, exist_ok=True)
         with self.isoPath.open("rb") as _iso:
-            for child in self.rchildren:
+            for child in self.rchildren():
                 _dest = self.dataPath / child.path
                 if child.is_file():
                     with _dest.open("wb") as f:
@@ -673,7 +708,7 @@ class GamecubeISO(ISOBase):
         _dataOfs = align_int(startpos, 4)
         _curEntry = 1
         _minOffset = self.MaxSize - 4
-        for child in self.rchildren:
+        for child in self.rchildren():
             if child.is_file() and child._position:
                 child._fileoffset = align_int(child._position, child._alignment)
                 if child._fileoffset < _minOffset:
@@ -689,7 +724,8 @@ class GamecubeISO(ISOBase):
 
             if child.is_file():
                 if not child._position:
-                    child._fileoffset = align_int(_dataOfs, child._alignment)
+                    _dataOfs = align_int(_dataOfs, child._alignment)
+                    child._fileoffset = _dataOfs
                     if child._fileoffset < _minOffset:
                         _minOffset = child._fileoffset
 
@@ -739,49 +775,8 @@ class GamecubeISO(ISOBase):
             child = self._read_nodes(fst, FSTNode.empty(), entryCount * 0xC)
             self.add_child(child)
 
-    def save_file_systemv(self, startpos: int = 0, useConfig: bool = True, preCalc: bool = True):
-        """
-        Save the file system data to the target ISO
 
-            fst:       BytesIO or opened file object to write fst data to
-            startpos:  Starting position in ISO to write files
-            useConfig: Initialize node info using the root config
-        """
-
-        if useConfig:
-            self._init_tables(self.configPath)
-            self.pre_calc_metadata(self.MaxSize - self.get_auto_blob_size())
-        elif preCalc:
-            self.pre_calc_metadata(self.MaxSize - self.get_auto_blob_size())
-
-        self._rawFST.seek(0)
-        self._rawFST.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
-        write_uint32(self._rawFST, len(self))
-
-        _curEntry = 1
-        _strOfs = 0
-        _strTableOfs = self.strTableOfs
-
-        for child in self.rchildren:
-            if child._exclude:
-                continue
-
-            child._id = _curEntry
-
-            self._rawFST.write(b"\x01" if child.is_dir() else b"\x00")
-            self._rawFST.write((_strOfs).to_bytes(3, "big", signed=False))
-            write_uint32(self._rawFST, child.parent._id if child.is_dir() else child._fileoffset)
-            write_uint32(self._rawFST, len(child) +
-                        _curEntry if child.is_dir() else child.size)
-
-            _curEntry += 1
-
-            _oldpos = self._rawFST.tell()
-            self._rawFST.seek(_strOfs + _strTableOfs)
-            self._rawFST.write(child.name.encode("shift-jis") + b"\x00")
-            _strOfs += len(child.name) + 1
-
-            self._rawFST.seek(_oldpos)
+        
 
     def load_config(self, path: Path = None):
         self._init_tables(path)
@@ -811,10 +806,6 @@ class GamecubeISO(ISOBase):
 
             if entry.is_file():
                 child = FSTNode.file(entry.name, parent=parentnode, size=entry.stat().st_size)
-
-                if parentnode is not None:
-                    parentnode.add_child(child)
-
                 child._alignment = self._get_alignment(child)
                 child._position = self._get_location(child)
                 child._exclude = disable
@@ -835,7 +826,7 @@ class GamecubeISO(ISOBase):
         self._locationTable.clear()
         self._excludeTable.clear()
 
-        for node in self.rchildren:
+        for node in self.rchildren():
             if node.is_file():
                 if node._alignment != 4:
                     self._alignmentTable[node.path] = node._alignment
