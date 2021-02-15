@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
+from typing import Union
 
 from PIL import Image
 
@@ -154,7 +155,7 @@ class BNR(RGB5A3):
 
     @rawImage.setter
     @io_preserve
-    def rawImage(self, _img: [bytes, BytesIO, Image.Image]):
+    def rawImage(self, _img: Union[bytes, BytesIO, Image.Image]):
         self._rawdata.seek(0x20)
         if isinstance(_img, bytes):
             self._rawdata.write(_img[:0x1800])
@@ -310,13 +311,15 @@ class BNR(RGB5A3):
 
             self.rawImage = Image.open(f)
 
-    def _encode_pixel(self, pixel: tuple):
+    @staticmethod
+    def _encode_pixel(pixel: tuple):
         if len(pixel) == 3:
             return RGB5A1.encode_pixel(pixel)
         else:
             return RGB5A3.encode_pixel(pixel)
 
-    def _decode_pixel(self, pixel: int):
+    @staticmethod
+    def _decode_pixel(pixel: int):
         if (pixel >> 15) & 1:
             return RGB5A1.decode_pixel(pixel)
         else:

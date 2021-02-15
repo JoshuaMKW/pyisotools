@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
-import time
 from datetime import datetime
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
+from typing import Union
 
 from dolreader.dol import DolFile
 from sortedcontainers import SortedDict, SortedList
@@ -66,7 +65,7 @@ class ISOBase(_ISOInfo):
         self._locationTable = SortedDict()
         self._excludeTable = SortedList()
 
-    def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> (FSTNode, int):
+    def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> FSTNode:
         _type = read_ubyte(fst)
         _nameOfs = int.from_bytes(fst.read(3), "big", signed=False)
         _entryOfs = read_uint32(fst)
@@ -142,7 +141,7 @@ class ISOBase(_ISOInfo):
         except IndexError:
             return 4
 
-    def _get_alignment(self, node: [FSTNode, str]) -> int:
+    def _get_alignment(self, node: Union[FSTNode, str]) -> int:
         if isinstance(node, FSTNode):
             _path = node.path
         else:
@@ -154,7 +153,7 @@ class ISOBase(_ISOInfo):
                     return align
         return 4
 
-    def _get_location(self, node: [FSTNode, str]) -> int:
+    def _get_location(self, node: Union[FSTNode, str]) -> int:
         if isinstance(node, FSTNode):
             _path = node.path
         else:
@@ -163,7 +162,7 @@ class ISOBase(_ISOInfo):
         if self._locationTable:
             return self._locationTable.get(_path)
 
-    def _get_excluded(self, node: [FSTNode, str]) -> bool:
+    def _get_excluded(self, node: Union[FSTNode, str]) -> bool:
         if isinstance(node, FSTNode):
             _path = node.path
         else:
@@ -286,12 +285,12 @@ class GamecubeISO(ISOBase):
         return None
 
     @staticmethod
-    def build_root(root: Path, dest: [Path, str] = None, genNewInfo: bool = False):
+    def build_root(root: Path, dest: Union[Path, str] = None, genNewInfo: bool = False):
         virtualISO = GamecubeISO.from_root(root, genNewInfo)
         virtualISO.build(dest)
 
     @staticmethod
-    def extract_from(iso: Path, dest: [Path, str] = None):
+    def extract_from(iso: Path, dest: Union[Path, str] = None):
         virtualISO = GamecubeISO.from_iso(iso)
         virtualISO.extract(dest)
 
@@ -309,7 +308,7 @@ class GamecubeISO(ISOBase):
         else:
             return False
 
-    def build(self, dest: [Path, str] = None, preCalc: bool = True):
+    def build(self, dest: UnionUnion[Path, str] = None, preCalc: bool = True):
         self.progress.set_ready(False)
         self.progress.jobProgress = 0
         self.progress.jobSize = self.MaxSize
@@ -422,7 +421,7 @@ class GamecubeISO(ISOBase):
         
         self.progress.jobProgress = self.MaxSize
 
-    def extract(self, dest: [Path, str] = None, dumpPositions: bool = True):
+    def extract(self, dest: Union[Path, str] = None, dumpPositions: bool = True):
         self.progress.set_ready(False)
         self.progress.jobProgress = 0
 
@@ -483,7 +482,7 @@ class GamecubeISO(ISOBase):
         self.save_config()
         self.progress.jobProgress = self.progress.jobSize
 
-    def extract_system_data(self, dest: [Path, str] = None):
+    def extract_system_data(self, dest: Union[Path, str] = None):
         self.progress.set_ready(False)
         self.progress.jobProgress = 0
 

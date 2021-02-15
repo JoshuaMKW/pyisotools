@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Union
 
 
 class FileAccessOnFolderError(Exception):
@@ -213,7 +214,7 @@ class FSTNode(object):
                 size += node.size
             return size
 
-    def find_by_path(self, path: [Path, str], skipExcluded: bool = True) -> FSTNode:
+    def find_by_path(self, path: Union[Path, str], skipExcluded: bool = True) -> FSTNode:
         _path = str(path).lower()
         doGlob = "?" in _path or "*" in path
 
@@ -275,7 +276,7 @@ class FSTNode(object):
     def __bool__(self) -> bool:
         return True
 
-    def __contains__(self, other: [FSTNode, Path]) -> bool:
+    def __contains__(self, other: Union[FSTNode, Path]) -> bool:
         if isinstance(other, FSTNode):
             for child in self.children:
                 if child == other:

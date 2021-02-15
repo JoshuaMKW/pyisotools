@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import traceback
+from typing import Tuple
 import webbrowser
 from fnmatch import fnmatch
 from pathlib import Path
@@ -227,7 +228,7 @@ class Controller(QMainWindow):
         return self._fromIso
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
-    def iso_load_iso_dialog(self) -> (bool, str):
+    def iso_load_iso_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Open Gamecube ISO",
                              directory=str(
@@ -262,7 +263,7 @@ class Controller(QMainWindow):
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
-    def iso_load_root_dialog(self) -> (bool, str):
+    def iso_load_root_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Open Gamecube Root",
                              directory=str(
@@ -301,7 +302,7 @@ class Controller(QMainWindow):
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def iso_build_dialog(self) -> (bool, str):
+    def iso_build_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Build Root To...",
                              directory=str(
@@ -332,7 +333,7 @@ class Controller(QMainWindow):
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def iso_extract_dialog(self, dumpPositions: bool = False) -> (bool, str):
+    def iso_extract_dialog(self, dumpPositions: bool = False) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Extract ISO To...",
                              directory=str(self.extractPath.parent if self.extractPath else Path.home()))
@@ -360,7 +361,7 @@ class Controller(QMainWindow):
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def iso_extract_system_dialog(self) -> (bool, str):
+    def iso_extract_system_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Extract System Data To...",
                              directory=str(self.genericPath.parent if self.genericPath else Path.home()))
@@ -386,7 +387,7 @@ class Controller(QMainWindow):
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
-    def bnr_load_dialog(self) -> (bool, str):
+    def bnr_load_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Open Image",
                              directory=str(self.bnrImagePath.parent if self.bnrImagePath else Path.home()),
@@ -415,7 +416,7 @@ class Controller(QMainWindow):
             return False, "The file does not exist!"
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
-    def bnr_save_dialog(self) -> (bool, str):
+    def bnr_save_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Save Image To...",
                              directory=str(self.bnrImagePath.parent if self.bnrImagePath else Path.home()),
@@ -765,7 +766,7 @@ class Controller(QMainWindow):
 
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, callback=None, args=()) -> (bool, str):
+    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, callback=None, args=()) -> Tuple[bool, str]:
         if filter is None:
             filter = "Any folder"
 
