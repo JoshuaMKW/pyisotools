@@ -9,14 +9,16 @@
 ################################################################################
 
 from PySide2.QtCore import (QCoreApplication, QMetaObject, QObject, QPoint,
-    QRect, QSize, QUrl, Qt)
+                            QRect, QSize, Qt, QUrl)
 from PySide2.QtGui import (QBrush, QColor, QConicalGradient, QCursor, QFont,
-    QFontDatabase, QIcon, QLinearGradient, QPalette, QPainter, QPixmap,
-    QRadialGradient)
+                           QFontDatabase, QIcon, QLinearGradient, QPainter,
+                           QPalette, QPixmap, QRadialGradient)
 from PySide2.QtWidgets import *
+from PySide2.QtWinExtras import QWinTaskbarProgress
 
-from .customwidgets import FilteredPlainTextEdit
 from . import icons_rc
+from .customwidgets import FilteredPlainTextEdit
+
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -28,8 +30,8 @@ class Ui_MainWindow(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
         MainWindow.setSizePolicy(sizePolicy)
-        MainWindow.setMinimumSize(QSize(811, 531))
-        MainWindow.setMaximumSize(QSize(900, 531))
+        MainWindow.setMinimumSize(QSize(841, 531))
+        MainWindow.setMaximumSize(QSize(841, 531))
         icon = QIcon()
         icon.addFile(u":/icons/Logo", QSize(), QIcon.Normal, QIcon.Off)
         MainWindow.setWindowIcon(icon)
@@ -372,6 +374,11 @@ class Ui_MainWindow(object):
         self.operationProgressBar.setTextVisible(False)
         self.operationProgressBar.setInvertedAppearance(False)
         self.operationProgressBar.setTextDirection(QProgressBar.TopToBottom)
+        self.taskbarProgressBar = QWinTaskbarProgress(self.centralwidget)
+        self.taskbarProgressBar.setObjectName("taskbarProgressBar")
+        self.taskbarProgressBar.setMaximum(100)
+        self.taskbarProgressBar.setMinimum(0)
+        self.taskbarProgressBar.setValue(0)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName(u"menubar")

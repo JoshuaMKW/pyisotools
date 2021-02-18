@@ -7,10 +7,10 @@ import sys
 import threading
 import time
 import traceback
-from typing import Tuple
 import webbrowser
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Tuple
 
 from PIL import Image, ImageQt
 from PySide2.QtCore import QEvent, QFile, Qt, QTextStream, QThread, Signal
@@ -51,18 +51,24 @@ def notify_status(context: JobDialogState):
             try:
                 value = func(*args, **kwargs)
             except Exception:
+                args[0].ui.taskbarProgressBar.stop()
                 dialog = JobFailedDialog(args[0], info="".join(traceback.format_exc()))
                 dialog.exec_()
                 args[0].ui.operationProgressBar.setTextVisible(False)
                 args[0].ui.operationProgressBar.setValue(0)
+                args[0].ui.taskbarProgressBar.reset()
+                args[0].ui.taskbarProgressBar.hide()
                 return None
 
             dialog = None
             if __GLOBAL_STATE[0] is False:
+                args[0].ui.taskbarProgressBar.stop()
                 dialog = JobFailedDialog(args[0], info=__GLOBAL_STATE[1])
                 dialog.exec_()
                 args[0].ui.operationProgressBar.setTextVisible(False)
                 args[0].ui.operationProgressBar.setValue(0)
+                args[0].ui.taskbarProgressBar.reset()
+                args[0].ui.taskbarProgressBar.hide()
                 __GLOBAL_STATE[0] = True
                 __GLOBAL_STATE[1] = ""
             elif issubclass(type(value[1]), QDialog):
@@ -79,6 +85,8 @@ def notify_status(context: JobDialogState):
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
                     args[0].ui.operationProgressBar.setTextVisible(False)
                     args[0].ui.operationProgressBar.setValue(0)
+                    args[0].ui.taskbarProgressBar.reset()
+                    args[0].ui.taskbarProgressBar.hide()
             else:
                 if value[0] is False and (context & JobDialogState.SHOW_FAILURE):
                     dialog = JobFailedDialog(args[0], info=value[1])
@@ -101,6 +109,8 @@ def notify_status(context: JobDialogState):
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
                     args[0].ui.operationProgressBar.setTextVisible(False)
                     args[0].ui.operationProgressBar.setValue(0)
+                    args[0].ui.taskbarProgressBar.reset()
+                    args[0].ui.taskbarProgressBar.hide()
 
             return value
         return wrapper
@@ -718,6 +728,8 @@ class Controller(QMainWindow):
             else:
                 path = self.iso.dataPath / item.node.path
 
+            buildAction = QAction(f"Build Root To...", self.ui.fileSystemTreeWidget)
+            buildAction.triggered.connect(self.iso_build_dialog)
             viewAction = QAction("Open Path in Explorer", self.ui.fileSystemTreeWidget)
             viewAction.triggered.connect(lambda clicked=None, x=path: self._open_path_in_explorer(x))
             alignmentAction = QAction("Set Alignment...", self.ui.fileSystemTreeWidget)
@@ -726,11 +738,18 @@ class Controller(QMainWindow):
             positionAction.triggered.connect(lambda clicked=None, x=item: self._open_position_dialog(x))
             excludeAction = QAction("Include" if item.node._exclude else "Exclude", self.ui.fileSystemTreeWidget)
             excludeAction.triggered.connect(lambda clicked=None, x=item: self._disable_node(x))
+
+            if item.node.is_root():
+                menu.addAction(buildAction)
+                menu.addSeparator()
+
             menu.addAction(viewAction)
             menu.addSeparator()
             menu.addAction(alignmentAction)
+
             if item.node.is_file():
                 menu.addAction(positionAction)
+
             if not item.node.is_root():
                 menu.addSeparator()
                 menu.addAction(excludeAction)
@@ -1002,11 +1021,17 @@ class ProgressHandler(QThread):
         self.controller.ui.operationProgressBar.setMaximum(self.controller.iso.progress.jobSize)
         self.controller.ui.operationProgressBar.setValue(0)
 
+        self.controller.ui.taskbarProgressBar.setMaximum(self.controller.iso.progress.jobSize)
+        self.controller.ui.taskbarProgressBar.setValue(0)
+        self.controller.ui.taskbarProgressBar.show()
+
         while self.controller.iso.progress.jobProgress < self.controller.iso.progress.jobSize and not self.watched.is_zombie():
             self.controller.ui.operationProgressBar.setValue(self.controller.iso.progress.jobProgress)
+            self.controller.ui.taskbarProgressBar.setValue(self.controller.iso.progress.jobProgress)
             time.sleep(0.01)
 
         self.controller.ui.operationProgressBar.setValue(self.controller.iso.progress.jobProgress)
+        self.controller.ui.taskbarProgressBar.setValue(self.controller.iso.progress.jobProgress)
 
 
 def _recursive_enable(parent):
