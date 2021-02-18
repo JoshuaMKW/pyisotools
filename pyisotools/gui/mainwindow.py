@@ -379,6 +379,7 @@ class Ui_MainWindow(object):
         self.taskbarProgressBar.setMaximum(100)
         self.taskbarProgressBar.setMinimum(0)
         self.taskbarProgressBar.setValue(0)
+        self.taskbarProgressBar.setVisible(True)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName(u"menubar")
