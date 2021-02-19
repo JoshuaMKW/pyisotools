@@ -298,7 +298,7 @@ class FSTRoot(FSTNode):
         return f"{self.__class__.__name__}<{self.num_children()} entries>"
 
     def nodes_by_offset(self, reverse: bool = False) -> FSTNode:
-        for node in sorted(self.rfiles, key=lambda x: x._fileoffset, reverse=reverse):
+        for node in sorted(self.rfiles(), key=lambda x: x._fileoffset, reverse=reverse):
             yield node
 
     def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
