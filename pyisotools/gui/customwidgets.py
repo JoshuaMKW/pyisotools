@@ -112,7 +112,7 @@ class FilteredPlainTextEdit(QPlainTextEdit):
         self.setTextCursor(textCursor)
 
 
-class FSTTreeWidget(QTreeWidgetItem):
+class FSTTreeItem(QTreeWidgetItem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._fstNode = None
@@ -149,7 +149,7 @@ class FSTTreeWidget(QTreeWidgetItem):
     def excluded(self, exclude: bool):
         self.node._exclude = exclude
 
-    def __lt__(self, other: FSTTreeWidget):
+    def __lt__(self, other: FSTTreeItem):
         if self.node.is_root() and not other.node.is_root():
             return True
         elif self.node.is_dir() and other.node.is_file():

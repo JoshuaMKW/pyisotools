@@ -26,7 +26,7 @@ from ..apploader import Apploader
 from ..bi2 import BI2
 from ..bnrparser import BNR
 from ..iso import FSTNode, GamecubeISO, ISOBase
-from .customwidgets import FSTTreeWidget
+from .customwidgets import FSTTreeItem
 from .nodewindow import Ui_NodeFieldWindow
 from .updater import GitReleaseUpdateScraper, ReleaseData
 from .updatewindow import Ui_UpdateDialog
@@ -698,7 +698,7 @@ class Controller(QMainWindow):
         self.setWindowTitle(f"pyisotools v{__version__}")
 
     def load_file_system(self):
-        rootNode = FSTTreeWidget()
+        rootNode = FSTTreeItem()
         rootNode.setIcon(0, QIcon(u":/icons/Disc"))
         rootNode.setText(0, "root")
         rootNode.node = self.iso
@@ -771,7 +771,7 @@ class Controller(QMainWindow):
 
         menu.exec_(self.ui.fileSystemTreeWidget.mapToGlobal(point))
 
-    def file_system_set_fields(self, item: FSTTreeWidget, column: int):
+    def file_system_set_fields(self, item: FSTTreeItem, column: int):
         if item.node.is_dir():
             self.ui.fileSystemStartInfoLabel.setText("Start Index:")
             self.ui.fileSystemSizeInfoLabel.setText("End Index:")
@@ -819,7 +819,7 @@ class Controller(QMainWindow):
             return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
-    def _open_alignment_dialog(self, item: FSTTreeWidget):
+    def _open_alignment_dialog(self, item: FSTTreeItem):
         window = Ui_NodeFieldWindow()
         dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
 
@@ -863,7 +863,7 @@ class Controller(QMainWindow):
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
-    def _open_position_dialog(self, item: FSTTreeWidget):
+    def _open_position_dialog(self, item: FSTTreeItem):
         window = Ui_NodeFieldWindow()
         dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
 
@@ -909,7 +909,7 @@ class Controller(QMainWindow):
             self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._position:X}")
             return True, None
 
-    def _disable_node(self, item: FSTTreeWidget):
+    def _disable_node(self, item: FSTTreeItem):
         if item.node._exclude:
             item.node._exclude = False
             if len(item.node.path.split("/")) == 1 and item.node.is_file() and fnmatch(item.node.path, "*opening.bnr"):
@@ -941,9 +941,9 @@ class Controller(QMainWindow):
         elif sys.platform == "darwin":
             subprocess.Popen(['open', '--', path.resolve()])
 
-    def _load_fst_tree(self, parent: FSTTreeWidget, node: FSTNode):
+    def _load_fst_tree(self, parent: FSTTreeItem, node: FSTNode):
         for child in node.children:
-            treeNode = FSTTreeWidget(child.name)
+            treeNode = FSTTreeItem(child.name)
             treeNode.setText(0, child.name)
             treeNode.setDisabled(child._exclude)
             treeNode.node = child
