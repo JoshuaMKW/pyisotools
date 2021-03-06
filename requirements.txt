@@ -2,3 +2,4 @@ dolreader
 PySide2
 pillow
 sortedcontainers
+bs4
