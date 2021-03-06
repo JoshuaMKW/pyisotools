@@ -1,5 +1,4 @@
 import sys
-from os import getenv
 from pathlib import Path
 
 def resource_path(relative_path: str = "") -> Path:
@@ -17,6 +16,8 @@ def resource_path(relative_path: str = "") -> Path:
 
 def get_program_folder(folder: str = "") -> Path:
     """ Get path to appdata """
+    from os import getenv
+    
     if sys.platform == "win32":
         datapath = Path(getenv("APPDATA")) / folder
     elif sys.platform == "darwin":

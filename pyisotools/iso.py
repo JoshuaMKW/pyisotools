@@ -215,7 +215,7 @@ class GamecubeISO(ISOBase):
                 break
 
         if virtualISO.configPath and genNewInfo and virtualISO.bnr:
-            with (virtualISO.configPath).open("r") as f:
+            with virtualISO.configPath.open("r") as f:
                 config = json.load(f)
 
             if genNewInfo and virtualISO.bnr:
@@ -308,7 +308,7 @@ class GamecubeISO(ISOBase):
         else:
             return False
 
-    def build(self, dest: UnionUnion[Path, str] = None, preCalc: bool = True):
+    def build(self, dest: Union[Path, str] = None, preCalc: bool = True):
         self.progress.set_ready(False)
         self.progress.jobProgress = 0
         self.progress.jobSize = self.MaxSize
@@ -360,27 +360,27 @@ class GamecubeISO(ISOBase):
         # -- System -- #
 
         if self.is_dolphin_root():
-            with (self.systemPath / "boot.bin").open("wb") as boot:
-                self.bootheader.save(boot)
+            with Path(self.systemPath, "boot.bin").open("wb") as f:
+                self.bootheader.save(f)
 
-            with (self.systemPath / "bi2.bin").open("wb") as bi2:
-                self.bootinfo.save(bi2)
+            with Path(self.systemPath, "bi2.bin").open("wb") as f:
+                self.bootinfo.save(f)
 
-            with (self.systemPath / "apploader.img").open("wb") as appldr:
-                self.apploader.save(appldr)
+            with Path(self.systemPath, "apploader.img").open("wb") as f:
+                self.apploader.save(f)
 
-            with (self.systemPath / "fst.bin").open("wb") as fst:
-                fst.write(self._rawFST.getvalue())
+            with Path(self.systemPath, "fst.bin").open("wb") as f:
+                f.write(self._rawFST.getvalue())
         elif self.is_gcr_root():
-            with (self.systemPath / "ISO.hdr").open("wb") as boot:
-                self.bootheader.save(boot)
-                self.bootinfo.save(bi2)
+            with Path(self.systemPath, "ISO.hdr").open("wb") as f:
+                self.bootheader.save(f)
+                self.bootinfo.save(f)
 
-            with (self.systemPath / "AppLoader.ldr").open("wb") as appldr:
-                self.apploader.save(appldr)
+            with Path(self.systemPath, "AppLoader.ldr").open("wb") as f:
+                self.apploader.save(f)
 
-            with (self.systemPath / "Game.toc").open("wb") as fst: 
-                fst.write(self._rawFST.getvalue())
+            with Path(self.systemPath, "Game.toc").open("wb") as f: 
+                f.write(self._rawFST.getvalue())
         else:
             raise InvalidFSTError(f"{self.root} is not a valid root folder")
 
@@ -388,34 +388,34 @@ class GamecubeISO(ISOBase):
 
         # -- Files -- #
 
-        with self.isoPath.open("wb") as ISO:
-            self.bootheader.save(ISO)
+        with self.isoPath.open("wb") as f:
+            self.bootheader.save(f)
             self.progress.jobProgress += 0x440
 
-            self.bootinfo.save(ISO)
+            self.bootinfo.save(f)
             self.progress.jobProgress += 0x2000
 
-            self.apploader.save(ISO)
+            self.apploader.save(f)
             self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
 
-            ISO.write(b"\x00" * (self.bootheader.dolOffset - ISO.tell()))
-            self.dol.save(ISO, self.bootheader.dolOffset)
+            f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
+            self.dol.save(f, self.bootheader.dolOffset)
             self.progress.jobProgress += self.dol.size
 
-            ISO.seek(ISO.tell() + self.dol.size)
-            ISO.write(b"\x00" * (self.bootheader.fstOffset - ISO.tell()))
+            f.seek(f.tell() + self.dol.size)
+            f.write(b"\x00" * (self.bootheader.fstOffset - f.tell()))
 
-            ISO.write(self._rawFST.getvalue())
+            f.write(self._rawFST.getvalue())
             self.progress.jobProgress += len(self._rawFST.getbuffer())
             
             for child in self.rfiles(includedOnly=True):
-                ISO.write(b"\x00" * (child._fileoffset - ISO.tell()))
-                ISO.seek(child._fileoffset)
-                ISO.write((self.dataPath / child.path).read_bytes())
-                ISO.seek(0, 2)
+                f.write(b"\x00" * (child._fileoffset - f.tell()))
+                f.seek(child._fileoffset)
+                f.write((self.dataPath / child.path).read_bytes())
+                f.seek(0, 2)
                 self.progress.jobProgress += child.size
 
-            ISO.write(b"\x00" * (self.MaxSize - ISO.tell()))
+            f.write(b"\x00" * (self.MaxSize - f.tell()))
 
         # ----------- #
         
@@ -440,39 +440,39 @@ class GamecubeISO(ISOBase):
         systemPath = self.systemPath
         systemPath.mkdir(exist_ok=True)
 
-        with (systemPath / "boot.bin").open("wb") as f:
+        with Path(systemPath, "boot.bin").open("wb") as f:
             self.bootheader.save(f)
 
         self.progress.jobProgress += 0x440
 
-        with (systemPath / "bi2.bin").open("wb") as f:
+        with Path(systemPath, "bi2.bin").open("wb") as f:
             self.bootinfo.save(f)
 
         self.progress.jobProgress += 0x2000
 
-        with (systemPath / "apploader.img").open("wb") as f:
+        with Path(systemPath, "apploader.img").open("wb") as f:
             self.apploader.save(f)
 
         self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
 
-        with (systemPath / "main.dol").open("wb") as f:
+        with Path(systemPath, "main.dol").open("wb") as f:
             self.dol.save(f)
 
         self.progress.jobProgress += self.dol.size
 
-        with (systemPath / "fst.bin").open("wb") as f:
+        with Path(systemPath, "fst.bin").open("wb") as f:
             f.write(self._rawFST.getvalue())
 
         self.progress.jobProgress += len(self._rawFST.getbuffer())
 
         self.dataPath.mkdir(parents=True, exist_ok=True)
-        with self.isoPath.open("rb") as _iso:
+        with self.isoPath.open("rb") as f:
             for child in self.rchildren():
                 _dest = self.dataPath / child.path
                 if child.is_file():
                     with _dest.open("wb") as f:
-                        _iso.seek(child._fileoffset)
-                        f.write(_iso.read(child.size))
+                        f.seek(child._fileoffset)
+                        f.write(f.read(child.size))
                         self.progress.jobProgress += child.size
                     if dumpPositions:
                         self._locationTable[child.path] = child._fileoffset
@@ -497,27 +497,27 @@ class GamecubeISO(ISOBase):
         systemPath = dest / "sys"
         systemPath.mkdir(parents=True, exist_ok=True)
 
-        with (systemPath / "boot.bin").open("wb") as f:
+        with Path(systemPath, "boot.bin").open("wb") as f:
             self.bootheader.save(f)
 
         self.progress.jobProgress += 0x440
 
-        with (systemPath / "bi2.bin").open("wb") as f:
+        with Path(systemPath, "bi2.bin").open("wb") as f:
             self.bootinfo.save(f)
 
         self.progress.jobProgress += 0x2000
 
-        with (systemPath / "apploader.img").open("wb") as f:
+        with Path(systemPath, "apploader.img").open("wb") as f:
             self.apploader.save(f)
 
         self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
 
-        with (systemPath / "main.dol").open("wb") as f:
+        with Path(systemPath, "main.dol").open("wb") as f:
             self.dol.save(f)
 
         self.progress.jobProgress += self.dol.size
 
-        with (systemPath / "fst.bin").open("wb") as f:
+        with Path(systemPath, "fst.bin").open("wb") as f:
             f.write(self._rawFST.getvalue())
 
         self.progress.jobProgress += len(self._rawFST.getbuffer())
@@ -533,25 +533,42 @@ class GamecubeISO(ISOBase):
         self.progress.jobSize = jobSize
         self.progress.set_ready(True)
 
-        systemPath = self.root / "sys"
+        systemPath = self.systemPath
 
-        with (systemPath / "boot.bin").open("wb") as f:
-            self.bootheader.save(f)
+        if self.is_dolphin_root():
+            with Path(systemPath, "boot.bin").open("wb") as f:
+                self.bootheader.save(f)
 
-        self.progress.jobProgress += 0x440
+            self.progress.jobProgress += 0x440
 
-        with (systemPath / "bi2.bin").open("wb") as f:
-            self.bootinfo.save(f)
+            with Path(systemPath, "bi2.bin").open("wb") as f:
+                self.bootinfo.save(f)
 
-        self.progress.jobProgress += 0x2000
+            self.progress.jobProgress += 0x2000
 
-        with (systemPath / "apploader.img").open("wb") as f:
-            self.apploader.save(f)
+            with Path(systemPath, "apploader.img").open("wb") as f:
+                self.apploader.save(f)
 
-        self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+            self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
 
-        with (systemPath / "main.dol").open("wb") as f:
-            self.dol.save(f)
+            with Path(systemPath, "main.dol").open("wb") as f:
+                self.dol.save(f)
+        elif self.is_gcr_root():
+            with Path(systemPath, "ISO.hdr").open("wb") as f:
+                self.bootheader.save(f)
+                self.bootinfo.save(f)
+
+            self.progress.jobProgress += 0x2440
+
+            with Path(systemPath, "Apploader.ldr").open("wb") as f:
+                self.apploader.save(f)
+
+            self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+
+            with Path(systemPath, "Start.dol").open("wb") as f:
+                self.dol.save(f)
+        else:
+            raise InvalidFSTError(f"{self.root} is not a valid root folder")
 
         self.progress.jobProgress += self.dol.size
         self._save_config_regen()
@@ -567,17 +584,17 @@ class GamecubeISO(ISOBase):
         self.progress.jobSize = jobSize
         self.progress.set_ready(True)
         
-        with self.isoPath.open("r+b") as ISO:
-            self.bootheader.save(ISO)
+        with self.isoPath.open("r+b") as f:
+            self.bootheader.save(f)
             self.progress.jobProgress += 0x440
 
-            self.bootinfo.save(ISO)
+            self.bootinfo.save(f)
             self.progress.jobProgress += 0x2000
 
-            self.apploader.save(ISO)
+            self.apploader.save(f)
 
-            ISO.write(b"\x00" * (self.bootheader.dolOffset - ISO.tell()))
-            self.dol.save(ISO, self.bootheader.dolOffset)
+            f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
+            self.dol.save(f, self.bootheader.dolOffset)
 
             self.progress.jobProgress += self.dol.size
 
@@ -615,26 +632,26 @@ class GamecubeISO(ISOBase):
         self.root = root
 
         if self.is_dolphin_root():
-            with (self.systemPath / "main.dol").open("rb") as _dol:
-                self.dol = DolFile(_dol)
+            with Path(self.systemPath, "main.dol").open("rb") as f:
+                self.dol = DolFile(f)
 
-            with (self.systemPath / "boot.bin").open("rb") as f:
+            with Path(self.systemPath, "boot.bin").open("rb") as f:
                 self.bootheader = Boot(f)
 
-            with (self.systemPath / "bi2.bin").open("rb") as f:
+            with Path(self.systemPath, "bi2.bin").open("rb") as f:
                 self.bootinfo = BI2(f)
 
-            with (self.systemPath / "apploader.img").open("rb") as f:
+            with Path(self.systemPath, "apploader.img").open("rb") as f:
                 self.apploader = Apploader(f)
         elif self.is_gcr_root():
-            with (self.root / "&&systemdata" / "Start.dol").open("rb") as _dol:
-                self.dol = DolFile(_dol)
+            with Path(self.systemPath, "Start.dol").open("rb") as f:
+                self.dol = DolFile(f)
 
-            with (self.root / "&&systemdata" / "ISO.hdr").open("rb") as f:
+            with Path(self.systemPath, "ISO.hdr").open("rb") as f:
                 self.bootheader = Boot(f)
                 self.bootinfo = BI2(f)
 
-            with (self.root / "&&systemdata" / "Apploader.ldr").open("rb") as f:
+            with Path(self.systemPath, "Apploader.ldr").open("rb") as f:
                 self.apploader = Apploader(f)
 
         self._init_tables(self.configPath)
