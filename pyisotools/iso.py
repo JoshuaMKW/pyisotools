@@ -466,13 +466,13 @@ class GamecubeISO(ISOBase):
         self.progress.jobProgress += len(self._rawFST.getbuffer())
 
         self.dataPath.mkdir(parents=True, exist_ok=True)
-        with self.isoPath.open("rb") as f:
+        with self.isoPath.open("rb") as _iso:
             for child in self.rchildren():
                 _dest = self.dataPath / child.path
                 if child.is_file():
                     with _dest.open("wb") as f:
-                        f.seek(child._fileoffset)
-                        f.write(f.read(child.size))
+                        _iso.seek(child._fileoffset)
+                        f.write(_iso.read(child.size))
                         self.progress.jobProgress += child.size
                     if dumpPositions:
                         self._locationTable[child.path] = child._fileoffset
