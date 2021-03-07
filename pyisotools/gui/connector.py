@@ -48,24 +48,18 @@ def notify_status(context: JobDialogState):
             try:
                 value = func(*args, **kwargs)
             except Exception:
-                args[0].ui.taskbarProgressBar.stop()
                 dialog = JobFailedDialog(args[0], info="".join(traceback.format_exc()))
                 dialog.exec_()
                 args[0].ui.operationProgressBar.setTextVisible(False)
                 args[0].ui.operationProgressBar.setValue(0)
-                args[0].ui.taskbarProgressBar.reset()
-                args[0].ui.taskbarProgressBar.hide()
                 return None
 
             dialog = None
             if __GLOBAL_STATE[0] is False:
-                args[0].ui.taskbarProgressBar.stop()
                 dialog = JobFailedDialog(args[0], info=__GLOBAL_STATE[1])
                 dialog.exec_()
                 args[0].ui.operationProgressBar.setTextVisible(False)
                 args[0].ui.operationProgressBar.setValue(0)
-                args[0].ui.taskbarProgressBar.reset()
-                args[0].ui.taskbarProgressBar.hide()
                 __GLOBAL_STATE[0] = True
                 __GLOBAL_STATE[1] = ""
             elif issubclass(type(value[1]), QDialog):
@@ -82,8 +76,6 @@ def notify_status(context: JobDialogState):
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
                     args[0].ui.operationProgressBar.setTextVisible(False)
                     args[0].ui.operationProgressBar.setValue(0)
-                    args[0].ui.taskbarProgressBar.reset()
-                    args[0].ui.taskbarProgressBar.hide()
             else:
                 if value[0] is False and (context & JobDialogState.SHOW_FAILURE):
                     dialog = JobFailedDialog(args[0], info=value[1])
@@ -106,8 +98,6 @@ def notify_status(context: JobDialogState):
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
                     args[0].ui.operationProgressBar.setTextVisible(False)
                     args[0].ui.operationProgressBar.setValue(0)
-                    args[0].ui.taskbarProgressBar.reset()
-                    args[0].ui.taskbarProgressBar.hide()
 
             return value
         return wrapper
@@ -1018,17 +1008,11 @@ class ProgressHandler(QThread):
         self.controller.ui.operationProgressBar.setMaximum(self.controller.iso.progress.jobSize)
         self.controller.ui.operationProgressBar.setValue(0)
 
-        self.controller.ui.taskbarProgressBar.setMaximum(self.controller.iso.progress.jobSize)
-        self.controller.ui.taskbarProgressBar.setValue(0)
-        self.controller.ui.taskbarProgressBar.show()
-
         while self.controller.iso.progress.jobProgress < self.controller.iso.progress.jobSize and not self.watched.is_zombie():
             self.controller.ui.operationProgressBar.setValue(self.controller.iso.progress.jobProgress)
-            self.controller.ui.taskbarProgressBar.setValue(self.controller.iso.progress.jobProgress)
             time.sleep(0.01)
 
         self.controller.ui.operationProgressBar.setValue(self.controller.iso.progress.jobProgress)
-        self.controller.ui.taskbarProgressBar.setValue(self.controller.iso.progress.jobProgress)
 
 
 def _recursive_enable(parent):
