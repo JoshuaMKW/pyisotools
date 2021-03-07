@@ -13,19 +13,16 @@ from pathlib import Path
 from typing import Tuple
 
 from PIL import Image, ImageQt
-from PySide2.QtCore import QEvent, QFile, Qt, QTextStream, QThread, Signal
-from PySide2.QtGui import QColor, QIcon
-from PySide2.QtWidgets import (QAction, QDialog, QDialogButtonBox, QFileDialog,
-                               QFrame, QLineEdit, QMainWindow, QMenu,
-                               QMessageBox, QPlainTextEdit, QTextEdit,
-                               QTreeWidgetItem, QVBoxLayout)
-from sortedcontainers import SortedDict, SortedList
+from PySide2.QtCore import QEvent, Qt, QThread
+from PySide2.QtGui import QIcon
+from PySide2.QtWidgets import (QAction, QDialog, QFileDialog,
+                               QFrame, QMainWindow, QMenu,
+                               QMessageBox)
 
 from .. import __version__
-from ..apploader import Apploader
 from ..bi2 import BI2
 from ..bnrparser import BNR
-from ..iso import FSTNode, GamecubeISO, ISOBase
+from ..iso import FSTNode, GamecubeISO
 from .customwidgets import FSTTreeItem
 from .nodewindow import Ui_NodeFieldWindow
 from .updater import GitReleaseUpdateScraper, ReleaseData

@@ -8,14 +8,12 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide2.QtCore import (QCoreApplication, QMetaObject, QObject, QPoint,
-    QRect, QRegExp, QSize, QUrl, Qt)
-from PySide2.QtGui import (QBrush, QColor, QConicalGradient, QCursor, QFont,
-    QFontDatabase, QIcon, QLinearGradient, QPalette, QPainter, QPixmap,
-    QRadialGradient, QRegExpValidator)
+from PySide2.QtCore import QCoreApplication, QMetaObject, QRect, QRegExp, Qt
+from PySide2.QtGui import QRegExpValidator
 from PySide2.QtWidgets import *
 
 from .customwidgets import FilteredPlainTextEdit
+
 
 class Ui_NodeFieldWindow(object):
     def setupUi(self, Dialog):

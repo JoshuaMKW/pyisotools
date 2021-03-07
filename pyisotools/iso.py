@@ -14,8 +14,7 @@ from pyisotools.apploader import Apploader
 from pyisotools.bi2 import BI2
 from pyisotools.bnrparser import BNR
 from pyisotools.boot import Boot
-from pyisotools.fst import (FST, FSTNode, FSTRoot, InvalidEntryError,
-                            InvalidFSTError)
+from pyisotools.fst import FST, FSTNode, InvalidEntryError, InvalidFSTError
 from pyisotools.iohelper import (align_int, read_string, read_ubyte,
                                  read_uint32, write_uint32)
 

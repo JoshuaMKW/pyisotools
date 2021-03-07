@@ -1,6 +1,5 @@
 import pyisotools
 import setuptools
-import os
 
 with open("README.md", "r", encoding="utf-8") as fh:
     longDescription = fh.read()

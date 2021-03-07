@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import os
 from io import BytesIO
-from pathlib import Path
 
-from pyisotools.iohelper import read_string, read_uint32, write_uint32
+from pyisotools.iohelper import read_uint32, write_uint32
 
 
 class BI2(object):

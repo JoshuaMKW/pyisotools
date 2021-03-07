@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from PySide2.QtCore import (QCoreApplication, QEvent, QMetaObject, QObject,
-                            QPoint, QRect, QRegExp, QSize, Qt, QUrl)
-from PySide2.QtGui import (QBrush, QColor, QConicalGradient, QCursor, QFont,
-                           QFontDatabase, QIcon, QKeyEvent, QKeySequence,
-                           QLinearGradient, QPainter, QPalette, QPixmap,
-                           QRadialGradient, QRegExpValidator, QTextOption)
+from PySide2.QtCore import Qt
+from PySide2.QtGui import (QKeyEvent, QKeySequence, QRegExpValidator,
+                           QTextOption)
 from PySide2.QtWidgets import *
 
 from ..fst import FSTNode
