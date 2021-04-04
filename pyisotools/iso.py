@@ -5,7 +5,7 @@ from datetime import datetime
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 from dolreader.dol import DolFile
 from sortedcontainers import SortedDict, SortedList
@@ -20,6 +20,9 @@ from pyisotools.iohelper import (align_int, read_string, read_ubyte,
 
 
 class FileSystemTooLargeError(Exception):
+    pass
+
+class FileSystemInvalidError(Exception):
     pass
 
 class _Progress(object):
@@ -93,18 +96,21 @@ class ISOBase(_ISOInfo):
 
         return node
 
-    def _init_tables(self, configPath: Path = None):
-        if configPath and configPath.is_file():
-            with configPath.open("r") as config:
-                data = json.load(config)
-
-            self._alignmentTable = SortedDict(data["alignment"])
-            self._locationTable = SortedDict(data["location"])
-            self._excludeTable = SortedList(data["exclude"])
-        else:
+    def _init_tables(self, config: Optional[Path] = None):
+        if not config:
             self._alignmentTable = SortedDict()
             self._locationTable = SortedDict()
             self._excludeTable = SortedList()
+        elif isinstance(config, dict):
+            self._alignmentTable = SortedDict(config["alignment"])
+            self._locationTable = SortedDict(config["location"])
+            self._excludeTable = SortedList(config["exclude"])
+        else:
+            with config.open("r") as f:
+                data = json.load(f)
+            self._alignmentTable = SortedDict(data["alignment"])
+            self._locationTable = SortedDict(data["location"])
+            self._excludeTable = SortedList(data["exclude"])
 
     def _recursive_extract(self, path: Path, dest: Path, iso):
         node = self.find_by_path(path)
@@ -188,74 +194,18 @@ class GamecubeISO(ISOBase):
 
     def __init__(self):
         super().__init__()
-        self.bnr = None
+        self.bnr: Optional[BNR] = None
 
     @classmethod
     def from_root(cls, root: Path, genNewInfo: bool = False) -> GamecubeISO:
         virtualISO = cls()
         virtualISO.init_from_root(root, genNewInfo)
-
-        if ((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x3) & -0x4) + virtualISO.datasize > virtualISO.MaxSize:
-            raise FileSystemTooLargeError(
-                f"{((virtualISO.bootheader.fstOffset + virtualISO.bootheader.fstSize + 0x3) & -0x4) + virtualISO.datasize} is larger than the max size of a GCM ({virtualISO.MaxSize})")
-
-        if virtualISO.bootinfo.countryCode == BI2.Country.JAPAN:
-            region = 2
-        elif virtualISO.bootinfo.countryCode == BI2.Country.KOREA:
-            region = 0
-        else:
-            region = virtualISO.bootinfo.countryCode - 1
-
-        for f in virtualISO.dataPath.iterdir():
-            if f.is_file() and f.match("*opening.bnr"):
-                if virtualISO._get_excluded(f.name):
-                    continue
-                virtualISO.bnr = BNR(f, region=region)
-                break
-
-        if virtualISO.configPath and genNewInfo and virtualISO.bnr:
-            with virtualISO.configPath.open("r") as f:
-                config = json.load(f)
-
-            if genNewInfo and virtualISO.bnr:
-                virtualISO.bnr.gameName = config["name"]
-                virtualISO.bnr.gameTitle = config["name"]
-                virtualISO.bnr.developerName = config["author"]
-                virtualISO.bnr.developerTitle = config["author"]
-                virtualISO.bnr.gameDescription = config["description"]
-
         return virtualISO
 
     @classmethod
     def from_iso(cls, iso: Path):
         virtualISO = cls()
         virtualISO.init_from_iso(iso)
-
-        if virtualISO.bootinfo.countryCode == BI2.Country.JAPAN:
-            region = BNR.Regions.JAPAN
-        else:
-            region = virtualISO.bootinfo.countryCode - 1
-
-        bnrNode = None
-        for child in virtualISO.children:
-            if child.is_file() and fnmatch(child.path, "*opening.bnr"):
-                bnrNode = child
-                break
-
-        if bnrNode:
-            with iso.open("rb") as _rawISO:
-                _rawISO.seek(bnrNode._fileoffset)
-                virtualISO.bnr = BNR.from_data(_rawISO, region=region, size=bnrNode.size)
-        else:
-            virtualISO.bnr = None
-
-        prev = FSTNode.file("", None, virtualISO.bootheader.fstSize, virtualISO.bootheader.fstOffset)
-        for node in virtualISO.nodes_by_offset():
-            alignment = virtualISO._detect_alignment(node, prev)
-            if alignment != 4:
-                virtualISO._alignmentTable[node.path] = alignment
-            prev = node
-
         return virtualISO
 
     @property
@@ -614,7 +564,7 @@ class GamecubeISO(ISOBase):
 
     def init_from_iso(self, iso: Path):
         self.isoPath = iso
-        self.root = Path(iso.parent / "root").resolve()
+        self.root = Path(iso.parent, "root").resolve()
         with iso.open("rb") as _rawISO:
             _rawISO.seek(0)
             self.bootheader = Boot(_rawISO)
@@ -626,6 +576,31 @@ class GamecubeISO(ISOBase):
 
         self._rawFST.seek(0)
         self.load_file_systemv(self._rawFST)
+
+        if self.bootinfo.countryCode == BI2.Country.JAPAN:
+            region = BNR.Regions.JAPAN
+        else:
+            region = self.bootinfo.countryCode - 1
+
+        bnrNode = None
+        for child in self.children:
+            if child.is_file() and fnmatch(child.path, "*opening.bnr"):
+                bnrNode = child
+                break
+
+        if bnrNode:
+            with iso.open("rb") as _rawISO:
+                _rawISO.seek(bnrNode._fileoffset)
+                self.bnr = BNR.from_data(_rawISO, region=region, size=bnrNode.size)
+        else:
+            self.bnr = None
+
+        prev = FSTNode.file("", None, self.bootheader.fstSize, self.bootheader.fstOffset)
+        for node in self.nodes_by_offset():
+            alignment = self._detect_alignment(node, prev)
+            if alignment != 4:
+                self._alignmentTable[node.path] = alignment
+            prev = node
 
     def init_from_root(self, root: Path, genNewInfo: bool = False):
         self.root = root
@@ -652,20 +627,8 @@ class GamecubeISO(ISOBase):
 
             with Path(self.systemPath, "Apploader.ldr").open("rb") as f:
                 self.apploader = Apploader(f)
-
-        self._init_tables(self.configPath)
-        if self.configPath.is_file() and genNewInfo:
-            with self.configPath.open("r") as f:
-                config = json.load(f)
-                
-            self.bootheader.gameName = config["name"]
-            self.bootheader.gameCode = config["gameid"][:4]
-            self.bootheader.makerCode = config["gameid"][4:6]
-            self.bootheader.version = int(config["version"])
-            self.apploader.buildDate = datetime.today().strftime("%Y/%m/%d")
-
-        self.isoPath = Path(
-            root.parent / f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}].iso").resolve()
+        else:
+            raise FileSystemInvalidError("Non Dolphin or GCR root type found")
 
         self.bootheader.dolOffset = (
             0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
@@ -677,6 +640,30 @@ class GamecubeISO(ISOBase):
 
         self.bootheader.fstSize = len(self._rawFST.getbuffer())
         self.bootheader.fstMaxSize = self.bootheader.fstSize
+
+        if ((self.bootheader.fstOffset + self.bootheader.fstSize + 0x3) & -0x4) + self.datasize > self.MaxSize:
+            raise FileSystemTooLargeError(
+                f"{((self.bootheader.fstOffset + self.bootheader.fstSize + 0x3) & -0x4) + self.datasize} is larger than the max size of a GCM ({self.MaxSize})")
+
+        if self.bootinfo.countryCode == BI2.Country.JAPAN:
+            region = 2
+        elif self.bootinfo.countryCode == BI2.Country.KOREA:
+            region = 0
+        else:
+            region = self.bootinfo.countryCode - 1
+
+        for f in self.dataPath.iterdir():
+            if f.is_file() and f.match("*opening.bnr"):
+                if self._get_excluded(f.name):
+                    continue
+                self.bnr = BNR(f, region=region)
+                break
+
+        if self.configPath.is_file() and genNewInfo:
+            self.load_config(self.configPath)
+
+        self.isoPath = Path(
+            root.parent / f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}].iso").resolve()
 
     def extract_path(self, path: Path, dest: Path):
         self.progress.set_ready(False)
@@ -790,17 +777,63 @@ class GamecubeISO(ISOBase):
             child = self._read_nodes(fst, FSTNode.empty(), entryCount * 0xC)
             self.add_child(child)
 
+    def load_config(self, path: Path):
+        with path.open("r") as f:
+            data = json.load(f)
 
-        
+        print(self.bnr)
+        self._init_tables(data)
 
-    def load_config(self, path: Path = None):
-        self._init_tables(path)
+        if "name" in data: #convert legacy to new
+            self.bootheader.gameName = data["name"]
+            self.bootheader.gameCode = data["gameid"][:4]
+            self.bootheader.makerCode = data["gameid"][4:6]
+            self.bootheader.version = data["version"]
+
+            if self.bnr:
+                self.bnr.gameName = data["name"]
+                self.bnr.gameTitle = data["name"]
+                self.bnr.developerName = data["author"]
+                self.bnr.developerTitle = data["author"]
+                self.bnr.gameDescription = data["description"]
+
+            config = {"gamename": self.bootheader.gameName,
+                      "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
+                      "diskid": self.bootheader.diskID,
+                      "version": self.bootheader.version,
+                      "shortname": self.bnr.gameName if self.bnr else "",
+                      "longname": self.bnr.gameTitle if self.bnr else "",
+                      "devname": self.bnr.developerName if self.bnr else "",
+                      "devtitle": self.bnr.developerTitle if self.bnr else "",
+                      "description": self.bnr.gameDescription if self.bnr else "",
+                      "alignment": self._alignmentTable,
+                      "location": {k : self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
+                      "exclude": [x for x in self._excludeTable]}
+            with path.open("w") as f:
+                json.dump(config, f, indent=4)
+        else:
+            self.bootheader.gameName = data["gamename"]
+            self.bootheader.gameCode = data["gameid"][:4]
+            self.bootheader.makerCode = data["gameid"][4:6]
+            self.bootheader.diskID = data["diskid"]
+            self.bootheader.version = data["version"]
+
+            if self.bnr:
+                self.bnr.gameName = data["shortname"]
+                self.bnr.gameTitle = data["longname"]
+                self.bnr.developerName = data["devname"]
+                self.bnr.developerTitle = data["devtitle"]
+                self.bnr.gameDescription = data["description"]
 
     def save_config(self):
-        config = {"name": self.bootheader.gameName,
+        config = {"gamename": self.bootheader.gameName,
                   "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
+                  "diskid": self.bootheader.diskID,
                   "version": self.bootheader.version,
-                  "author": self.bnr.developerTitle if self.bnr else "",
+                  "shortname": self.bnr.gameName,
+                  "longname": self.bnr.gameTitle,
+                  "devname": self.bnr.developerName if self.bnr else "",
+                  "devtitle": self.bnr.developerTitle if self.bnr else "",
                   "description": self.bnr.gameDescription if self.bnr else "",
                   "alignment": self._alignmentTable,
                   "location": {k : self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},

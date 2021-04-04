@@ -279,7 +279,7 @@ class Controller(QMainWindow):
 
         self.rootPath = selected
         if self.rootPath.is_dir():
-            self.iso = GamecubeISO.from_root(self.rootPath)
+            self.iso = GamecubeISO.from_root(self.rootPath, True)
             self._fromIso = False
             self.update_all()
             self.ui.actionClose.setEnabled(True)
@@ -631,17 +631,17 @@ class Controller(QMainWindow):
                 _boot.diskID = int(diskID, 16)
             else:
                 _boot.diskID = int(diskID)
-        except ValueError:
+        except Exception:
             dialog = JobFailedDialog(self)
             dialog.setText(f"Invalid input for `diskID` \"{diskID}\" could not be converted to int")
             return False, dialog
 
         try:
-            if diskID.startswith("0x"):
+            if version.startswith("0x"):
                 _boot.version = int(version, 16)
             else:
                 _boot.version = int(version)
-        except ValueError:
+        except Exception:
             dialog = JobFailedDialog(self)
             dialog.setText(f"Invalid input for `version` \"{version}\" could not be converted to int")
             return False, dialog
