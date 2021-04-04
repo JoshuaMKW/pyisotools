@@ -105,10 +105,8 @@ class FSTNode(object):
         while parent is not None:
             if parent.is_root():
                 break
-
             path = f"{parent.name}/{path}"
             parent = parent.parent
-
         return path
 
     @property
@@ -156,30 +154,20 @@ class FSTNode(object):
 
     @parent.setter
     def parent(self, node: FSTNode):
-        if self._parent is not None:
-            if self.is_dir():
-                if node is not None:
-                    diff = node._id - self._dirparent
-                    self._dirparent = node._id
-                else:
-                    diff = -self._dirparent
-                    self._dirparent = 0
-                for child in node.children:
-                    child._id += diff
-            self._parent.remove_child(self)
-        else:
-            if node is not None:
+        if self.is_dir():
+            if node:
                 self._dirparent = node._id
             else:
                 self._dirparent = 0
-
-        if node is not None:
+        if self._parent:
+            self._parent.remove_child(self)
+        if node:
             node._children[self.name] = self
 
         self._parent = node
 
     @property
-    def children(self):
+    def children(self) -> FSTNode:
         for child in sorted(self._children.values(), key=lambda x: x.name.upper()):
             yield child
 
@@ -209,9 +197,7 @@ class FSTNode(object):
         if self.is_file():
             return self._filesize
         else:
-            size = 0
-            for node in self.rfiles(includedOnly=True):
-                size += node.size
+            size = sum([node.size for node in self.rfiles(includedOnly=True)])
             return size
 
     def find_by_path(self, path: Union[Path, str], skipExcluded: bool = True) -> FSTNode:
@@ -242,10 +228,7 @@ class FSTNode(object):
         node.parent = None
 
     def num_children(self, skipExcluded: bool = True) -> int:
-        counter = 0
-        for _ in self.rchildren(includedOnly=skipExcluded):
-            counter += 1
-        return counter
+        return len(list(self.rchildren(includedOnly=skipExcluded)))
 
     def destroy(self):
         self.parent = None
