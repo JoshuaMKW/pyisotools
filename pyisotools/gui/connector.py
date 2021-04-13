@@ -10,10 +10,10 @@ import traceback
 import webbrowser
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 
 from PIL import Image, ImageQt
-from PySide2.QtCore import QEvent, Qt, QThread
+from PySide2.QtCore import QEvent, Qt, Signal
 from PySide2.QtGui import QIcon
 from PySide2.QtWidgets import (QAction, QDialog, QFileDialog,
                                QFrame, QMainWindow, QMenu,
@@ -24,21 +24,74 @@ from ..bi2 import BI2
 from ..bnrparser import BNR
 from ..iso import FSTNode, GamecubeISO
 from .customwidgets import FSTTreeItem
+from .flagthread import FlagThread
 from .nodewindow import Ui_NodeFieldWindow
 from .updater import GitReleaseUpdateScraper, ReleaseData
 from .updatewindow import Ui_UpdateDialog
 from .workpathing import get_program_folder, resource_path
 
-__GLOBAL_STATE = [True, ""]
+
+class ProgramState:
+    _GLOBAL_STATE = [True, ""]
+
+    @staticmethod
+    def get_message() -> str:
+        return ProgramState._GLOBAL_STATE[1]
+
+    @staticmethod
+    def set_error(msg: str = ""):
+        ProgramState._GLOBAL_STATE[0] = False
+        ProgramState._GLOBAL_STATE[1] = msg
+
+    @staticmethod
+    def set_success(msg: str = ""):
+        ProgramState._GLOBAL_STATE[0] = True
+        ProgramState._GLOBAL_STATE[1] = msg
+
+    @staticmethod
+    def is_error(msg: str = ""):
+        return ProgramState._GLOBAL_STATE[0] == False
+
+    @staticmethod
+    def is_success(msg: str = ""):
+        return ProgramState._GLOBAL_STATE[0] == True
+
+    @staticmethod
+    def reset():
+        ProgramState._GLOBAL_STATE = [True, ""]
+
+
+class ThreadManager:
+    _THREAD_COLLECTION = {}
+
+    @staticmethod
+    def register(t: Union[FlagThread, threading.Thread]):
+        if isinstance(t, FlagThread):
+            ThreadManager._THREAD_COLLECTION[t.objectName()] = t
+        else:
+            ThreadManager._THREAD_COLLECTION[t.getName()] = t
+
+    @staticmethod
+    def unregister(t: Union[FlagThread, threading.Thread]):
+        if isinstance(t, FlagThread):
+            ThreadManager._THREAD_COLLECTION.pop(t.objectName())
+        else:
+            ThreadManager._THREAD_COLLECTION.pop(t.getName())
+
+    @staticmethod
+    def threads() -> Union[FlagThread, threading.Thread]:
+        for thread in ThreadManager._THREAD_COLLECTION.values():
+            yield thread
+
 
 def excepthook(args: tuple):
-
-    __GLOBAL_STATE[0] = False
-    __GLOBAL_STATE[1] = "".join(traceback.format_exception(args[0], args[1], args[2]))
-
+    ProgramState.set_error(
+        "".join(traceback.format_exception(args[0], args[1], args[2])))
     args[3]._zombie = True
 
+
 threading.excepthook = excepthook
+
 
 def notify_status(context: JobDialogState):
     """ Wrapped function must return a (Controller, bool, str) tuple to indicate a status, and show message """
@@ -48,20 +101,21 @@ def notify_status(context: JobDialogState):
             try:
                 value = func(*args, **kwargs)
             except Exception:
-                dialog = JobFailedDialog(args[0], info="".join(traceback.format_exc()))
+                dialog = JobFailedDialog(
+                    args[0], info="".join(traceback.format_exc()))
                 dialog.exec_()
                 args[0].ui.operationProgressBar.setTextVisible(False)
                 args[0].ui.operationProgressBar.setValue(0)
                 return None
 
             dialog = None
-            if __GLOBAL_STATE[0] is False:
-                dialog = JobFailedDialog(args[0], info=__GLOBAL_STATE[1])
+            if ProgramState.is_error():
+                dialog = JobFailedDialog(
+                    args[0], info=ProgramState.get_message())
                 dialog.exec_()
                 args[0].ui.operationProgressBar.setTextVisible(False)
                 args[0].ui.operationProgressBar.setValue(0)
-                __GLOBAL_STATE[0] = True
-                __GLOBAL_STATE[1] = ""
+                ProgramState.reset()
             elif issubclass(type(value[1]), QDialog):
                 if value[0] is False and (context & JobDialogState.SHOW_FAILURE):
                     value[1].exec_()
@@ -148,6 +202,7 @@ class JobCompleteDialog(QMessageBox):
         self.setInformativeText(info)
         self.setWindowTitle("Info")
 
+
 class JobWarningDialog(QMessageBox):
     def __init__(self, info, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -155,6 +210,7 @@ class JobWarningDialog(QMessageBox):
         self.setIcon(QMessageBox.Warning)
         self.setText(info)
         self.setWindowTitle("Warning")
+
 
 class NodeFieldDialog(QDialog):
     def __init__(self, ui, *args, **kwargs):
@@ -166,7 +222,7 @@ class NodeFieldDialog(QDialog):
             if event.key() == Qt.Key_Return and self.ui.plainTextEdit.hasFocus():
                 self.accept()
                 return False
-        return super().eventFilter(obj, event)        
+        return super().eventFilter(obj, event)
 
 
 class Controller(QMainWindow):
@@ -176,8 +232,6 @@ class Controller(QMainWindow):
 
     def __init__(self, ui, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        __CACHED_GUI = self
-
         self.iso = None
 
         self.ui = ui
@@ -195,6 +249,7 @@ class Controller(QMainWindow):
         self.updater = GitReleaseUpdateScraper("JoshuaMKW", "pyisotools")
         self.updater.updateFound.connect(self.notify_update)
         self.updater.start()
+        ThreadManager.register(self.updater)
 
     @property
     def programConfig(self):
@@ -204,22 +259,27 @@ class Controller(QMainWindow):
     def closeEvent(self, event):
         self.update_program_config()
         self.updater.exit(0)
+        for thread in ThreadManager.threads():
+            if isinstance(thread, FlagThread):
+                thread.quit()
+                thread.wait()
         event.accept()
 
     def notify_update(self, releaseInfo: ReleaseData):
-        self.updater.skipCount = 60
+        self.updater.skipCount = 3600
 
-        dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
+        dialog = QDialog(self, Qt.WindowSystemMenuHint |
+                         Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
         updateWindow = Ui_UpdateDialog()
         updateWindow.setupUi(dialog)
         dialog.setModal(True)
 
-        updateWindow.updateLabel.setText(f"pyisotools {releaseInfo.version} available!")
+        updateWindow.updateLabel.setText(
+            f"pyisotools {releaseInfo.version} available!")
         updateWindow.changelogTextEdit.setHtml(str(releaseInfo.info))
 
         if dialog.exec_() == QDialog.Accepted:
             webbrowser.open_new_tab(releaseInfo.parentURL)
-
 
     def is_from_iso(self) -> bool:
         return self._fromIso
@@ -255,7 +315,8 @@ class Controller(QMainWindow):
         else:
             return False, "The file does not exist!"
 
-        self.setWindowTitle(f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (iso)")
+        self.setWindowTitle(
+            f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (iso)")
 
         return True, None
 
@@ -290,9 +351,11 @@ class Controller(QMainWindow):
             return False, "The file does not exist!"
 
         if self.iso.is_dolphin_root():
-            self.setWindowTitle(f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (root)")
+            self.setWindowTitle(
+                f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (root)")
         elif self.iso.is_gcr_root():
-            self.setWindowTitle(f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (GCR root)")
+            self.setWindowTitle(
+                f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (GCR root)")
         else:
             return False, f"{self.rootPath} is not a valid root folder!"
 
@@ -316,7 +379,8 @@ class Controller(QMainWindow):
 
         self.save_all(False)
 
-        isoProcess = StoppableThread(target=self.iso.build, args=(self.buildPath, False), daemon=True)
+        isoProcess = StoppableThread(target=self.iso.build, args=(
+            self.buildPath, False), daemon=True)
         progressBarProcess = ProgressHandler(self, isoProcess, self)
 
         isoProcess.start()
@@ -344,7 +408,8 @@ class Controller(QMainWindow):
 
         self.save_all(False)
 
-        isoProcess = StoppableThread(target=self.iso.extract, args=(self.extractPath, dumpPositions), daemon=True)
+        isoProcess = StoppableThread(target=self.iso.extract, args=(
+            self.extractPath, dumpPositions), daemon=True)
         progressBarProcess = ProgressHandler(self, isoProcess, self)
 
         isoProcess.start()
@@ -354,7 +419,7 @@ class Controller(QMainWindow):
 
         if isoProcess.is_alive():
             progressBarProcess.run()
-            
+
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
@@ -370,7 +435,8 @@ class Controller(QMainWindow):
 
         self.genericPath = Path(dialog.selectedFiles()[0]).resolve()
 
-        isoProcess = StoppableThread(target=self.iso.extract_system_data, args=(self.genericPath,), daemon=True)
+        isoProcess = StoppableThread(
+            target=self.iso.extract_system_data, args=(self.genericPath,), daemon=True)
         progressBarProcess = ProgressHandler(self, isoProcess, self)
 
         isoProcess.start()
@@ -387,7 +453,8 @@ class Controller(QMainWindow):
     def bnr_load_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Open Image",
-                             directory=str(self.bnrImagePath.parent if self.bnrImagePath else Path.home()),
+                             directory=str(
+                                 self.bnrImagePath.parent if self.bnrImagePath else Path.home()),
                              filter="PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;Nintendo BNR Image Info (*.bnr);;All files (*)")
 
         dialog.setFileMode(QFileDialog.ExistingFile)
@@ -403,7 +470,8 @@ class Controller(QMainWindow):
             else:
                 with Image.open(self.bnrImagePath) as image:
                     if image.size != (96, 32):
-                        dialog = JobWarningDialog(f"Resizing image of size {image.size} to match BNR size (96, 32)", self)
+                        dialog = JobWarningDialog(
+                            f"Resizing image of size {image.size} to match BNR size (96, 32)", self)
                         dialog.exec_()
                     self.iso.bnr.rawImage = image
 
@@ -416,7 +484,8 @@ class Controller(QMainWindow):
     def bnr_save_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Save Image To...",
-                             directory=str(self.bnrImagePath.parent if self.bnrImagePath else Path.home()),
+                             directory=str(
+                                 self.bnrImagePath.parent if self.bnrImagePath else Path.home()),
                              filter="PNG Image (*.png);;All files (*)")
 
         dialog.setFileMode(QFileDialog.AnyFile)
@@ -469,7 +538,7 @@ class Controller(QMainWindow):
         else:
             self.iso.bnr.index = self.ui.bannerLanguageComboBox.currentIndex()
             self.ui.bannerLanguageComboBox.setEnabled(True)
-        
+
         self.ui.bannerVersionTextBox.setEnabled(False)
 
         self.ui.bannerShortNameTextBox.setPlainText(self.iso.bnr.gameName)
@@ -484,7 +553,7 @@ class Controller(QMainWindow):
     def bnr_save_info(self):
         if not self.iso.bnr:
             return
-            
+
         self.iso.bnr.index = self.ui.bannerLanguageComboBox.currentIndex()
         self.iso.bnr.gameName = self.ui.bannerShortNameTextBox.toPlainText()
         self.iso.bnr.gameTitle = self.ui.bannerLongNameTextBox.toPlainText()
@@ -599,7 +668,8 @@ class Controller(QMainWindow):
         self.ui.isoNameTextBox.setPlainText(self.iso.bootheader.gameName)
         self.ui.isoGameCodeTextBox.setPlainText(self.iso.bootheader.gameCode)
         self.ui.isoMakerCodeTextBox.setPlainText(self.iso.bootheader.makerCode)
-        self.ui.isoVersionTextBox.setPlainText(str(self.iso.bootheader.version))
+        self.ui.isoVersionTextBox.setPlainText(
+            str(self.iso.bootheader.version))
         self.ui.isoBuildDateTextBox.setPlainText(self.iso.apploader.buildDate)
 
         if self.iso.bootinfo.countryCode == BI2.Country.AMERICA:
@@ -612,7 +682,8 @@ class Controller(QMainWindow):
             self.ui.isoRegionComboBox.setCurrentIndex(3)
 
         self.ui.isoRegionComboBox.setEnabled(False)
-        self.ui.isoDiskIDTextBox.setPlainText(f"0x{self.iso.bootheader.diskID:02X}")
+        self.ui.isoDiskIDTextBox.setPlainText(
+            f"0x{self.iso.bootheader.diskID:02X}")
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def save_all(self, showjob: bool = True):
@@ -633,7 +704,8 @@ class Controller(QMainWindow):
                 _boot.diskID = int(diskID)
         except Exception:
             dialog = JobFailedDialog(self)
-            dialog.setText(f"Invalid input for `diskID` \"{diskID}\" could not be converted to int")
+            dialog.setText(
+                f"Invalid input for `diskID` \"{diskID}\" could not be converted to int")
             return False, dialog
 
         try:
@@ -643,7 +715,8 @@ class Controller(QMainWindow):
                 _boot.version = int(version)
         except Exception:
             dialog = JobFailedDialog(self)
-            dialog.setText(f"Invalid input for `version` \"{version}\" could not be converted to int")
+            dialog.setText(
+                f"Invalid input for `version` \"{version}\" could not be converted to int")
             return False, dialog
 
         _appldr.buildDate = self.ui.isoBuildDateTextBox.toPlainText()
@@ -657,9 +730,11 @@ class Controller(QMainWindow):
             return True, None
         else:
             if self.is_from_iso():
-                isoProcess = StoppableThread(target=self.iso.save_system_datav, daemon=True)
+                isoProcess = StoppableThread(
+                    target=self.iso.save_system_datav, daemon=True)
             else:
-                isoProcess = StoppableThread(target=self.iso.save_system_data, daemon=True)
+                isoProcess = StoppableThread(
+                    target=self.iso.save_system_data, daemon=True)
 
             progressBarProcess = ProgressHandler(self, isoProcess, self)
 
@@ -715,16 +790,25 @@ class Controller(QMainWindow):
             else:
                 path = self.iso.dataPath / item.node.path
 
-            buildAction = QAction(f"Build Root To...", self.ui.fileSystemTreeWidget)
+            buildAction = QAction(f"Build Root To...",
+                                  self.ui.fileSystemTreeWidget)
             buildAction.triggered.connect(self.iso_build_dialog)
-            viewAction = QAction("Open Path in Explorer", self.ui.fileSystemTreeWidget)
-            viewAction.triggered.connect(lambda clicked=None, x=path: self._open_path_in_explorer(x))
-            alignmentAction = QAction("Set Alignment...", self.ui.fileSystemTreeWidget)
-            alignmentAction.triggered.connect(lambda clicked=None, x=item: self._open_alignment_dialog(x))
-            positionAction = QAction("Set Position...", self.ui.fileSystemTreeWidget)
-            positionAction.triggered.connect(lambda clicked=None, x=item: self._open_position_dialog(x))
-            excludeAction = QAction("Include" if item.node._exclude else "Exclude", self.ui.fileSystemTreeWidget)
-            excludeAction.triggered.connect(lambda clicked=None, x=item: self._disable_node(x))
+            viewAction = QAction("Open Path in Explorer",
+                                 self.ui.fileSystemTreeWidget)
+            viewAction.triggered.connect(
+                lambda clicked=None, x=path: self._open_path_in_explorer(x))
+            alignmentAction = QAction(
+                "Set Alignment...", self.ui.fileSystemTreeWidget)
+            alignmentAction.triggered.connect(
+                lambda clicked=None, x=item: self._open_alignment_dialog(x))
+            positionAction = QAction(
+                "Set Position...", self.ui.fileSystemTreeWidget)
+            positionAction.triggered.connect(
+                lambda clicked=None, x=item: self._open_position_dialog(x))
+            excludeAction = QAction(
+                "Include" if item.node._exclude else "Exclude", self.ui.fileSystemTreeWidget)
+            excludeAction.triggered.connect(
+                lambda clicked=None, x=item: self._disable_node(x))
 
             if item.node.is_root():
                 menu.addAction(buildAction)
@@ -742,18 +826,25 @@ class Controller(QMainWindow):
                 menu.addAction(excludeAction)
         else:
             if item.node.is_root():
-                extractAction = QAction(f"Extract ISO To...", self.ui.fileSystemTreeWidget)
+                extractAction = QAction(
+                    f"Extract ISO To...", self.ui.fileSystemTreeWidget)
                 extractAction.triggered.connect(self.iso_extract_dialog)
-                extractWithPosAction = QAction(f"Extract ISO With Positions To...", self.ui.fileSystemTreeWidget)
-                extractWithPosAction.triggered.connect(lambda x: self.iso_extract_dialog(True))
-                sysExtractAction = QAction(f"Extract System Data To...", self.ui.fileSystemTreeWidget)
-                sysExtractAction.triggered.connect(self.iso_extract_system_dialog)
+                extractWithPosAction = QAction(
+                    f"Extract ISO With Positions To...", self.ui.fileSystemTreeWidget)
+                extractWithPosAction.triggered.connect(
+                    lambda x: self.iso_extract_dialog(True))
+                sysExtractAction = QAction(
+                    f"Extract System Data To...", self.ui.fileSystemTreeWidget)
+                sysExtractAction.triggered.connect(
+                    self.iso_extract_system_dialog)
                 menu.addAction(extractAction)
                 menu.addAction(extractWithPosAction)
                 menu.addAction(sysExtractAction)
             else:
-                extractAction = QAction(f"Extract \"{item.text(0)}\" To...", self.ui.fileSystemTreeWidget)
-                extractAction.triggered.connect(lambda x=self, y=item.node: self.save_generic_to_folder(parent=x, callback=_extract_path_from_iso, args=(y,)))
+                extractAction = QAction(
+                    f"Extract \"{item.text(0)}\" To...", self.ui.fileSystemTreeWidget)
+                extractAction.triggered.connect(lambda x=self, y=item.node: self.save_generic_to_folder(
+                    parent=x, callback=_extract_path_from_iso, args=(y,)))
                 menu.addAction(extractAction)
 
         menu.exec_(self.ui.fileSystemTreeWidget.mapToGlobal(point))
@@ -763,13 +854,15 @@ class Controller(QMainWindow):
             self.ui.fileSystemStartInfoLabel.setText("Start Index:")
             self.ui.fileSystemSizeInfoLabel.setText("End Index:")
             self.ui.fileSystemStartInfoTextBox.setPlainText(str(item.node._id))
-            self.ui.fileSystemSizeInfoTextBox.setPlainText(str(item.node.size + item.node._id))
+            self.ui.fileSystemSizeInfoTextBox.setPlainText(
+                str(item.node.size + item.node._id))
         else:
             self.ui.fileSystemStartInfoLabel.setText("File Location:")
             self.ui.fileSystemSizeInfoLabel.setText("File Size:")
-            self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset if not item.node._position else item.node._position:X}")
-            self.ui.fileSystemSizeInfoTextBox.setPlainText(f"0x{item.node.size:X}")
-
+            self.ui.fileSystemStartInfoTextBox.setPlainText(
+                f"0x{item.node._fileoffset if not item.node._position else item.node._position:X}")
+            self.ui.fileSystemSizeInfoTextBox.setPlainText(
+                f"0x{item.node.size:X}")
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, callback=None, args=()) -> Tuple[bool, str]:
@@ -778,9 +871,10 @@ class Controller(QMainWindow):
 
         dialog = QFileDialog(parent=parent,
                              caption=caption,
-                             directory=str(self.genericPath.parent if self.genericPath else Path.home()),
+                             directory=str(
+                                 self.genericPath.parent if self.genericPath else Path.home()),
                              filter=filter)
-                             
+
         dialog.setAcceptMode(QFileDialog.AcceptOpen)
         dialog.setFileMode(QFileDialog.DirectoryOnly)
 
@@ -790,7 +884,8 @@ class Controller(QMainWindow):
         self.genericPath = Path(dialog.selectedFiles()[0])
 
         if callback:
-            isoProcess = StoppableThread(target=callback, args=(self, self.genericPath, *args), daemon=True)
+            isoProcess = StoppableThread(target=callback, args=(
+                self, self.genericPath, *args), daemon=True)
             progressBarProcess = ProgressHandler(self, isoProcess, self)
 
             isoProcess.start()
@@ -808,7 +903,8 @@ class Controller(QMainWindow):
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
     def _open_alignment_dialog(self, item: FSTTreeItem):
         window = Ui_NodeFieldWindow()
-        dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
+        dialog = QDialog(self, Qt.WindowSystemMenuHint |
+                         Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
 
         window.setupUi(dialog)
 
@@ -834,25 +930,30 @@ class Controller(QMainWindow):
                 alignment = int(text)
         except ValueError:
             dialog = JobFailedDialog(self)
-            dialog.setText(f"Invalid input \"{text}\" could not be converted to int")
+            dialog.setText(
+                f"Invalid input \"{text}\" could not be converted to int")
             return False, dialog
 
         alignment = _round_up_to_power_of_2(max(4, min(alignment, 32768)))
         if item.node.is_file() and item.node._alignment != alignment:
             item.node._alignment = alignment
-            self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
-            self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset:X}")
+            self.iso.pre_calc_metadata(
+                self.iso.MaxSize - self.iso.get_auto_blob_size())
+            self.ui.fileSystemStartInfoTextBox.setPlainText(
+                f"0x{item.node._fileoffset:X}")
         if item.node.is_dir():
             for child in item.node.rchildren():
                 child._alignment = _round_up_to_power_of_2(alignment)
-            self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
+            self.iso.pre_calc_metadata(
+                self.iso.MaxSize - self.iso.get_auto_blob_size())
 
         return True, None
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
     def _open_position_dialog(self, item: FSTTreeItem):
         window = Ui_NodeFieldWindow()
-        dialog = QDialog(self, Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
+        dialog = QDialog(self, Qt.WindowSystemMenuHint |
+                         Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
 
         window.setupUi(dialog)
 
@@ -870,7 +971,7 @@ class Controller(QMainWindow):
             return False, None
 
         text = window.plainTextEdit.toPlainText()
-        
+
         try:
             if text.startswith("0x"):
                 position = int(text, 16)
@@ -878,22 +979,27 @@ class Controller(QMainWindow):
                 position = int(text)
         except ValueError:
             dialog = JobFailedDialog(self)
-            dialog.setText(f"Invalid input \"{text}\" could not be converted to int")
+            dialog.setText(
+                f"Invalid input \"{text}\" could not be converted to int")
             return False, dialog
 
         if position < 0:
             if item.node._position:
                 item.node._position = None
-                self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
-                self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset:X}")
+                self.iso.pre_calc_metadata(
+                    self.iso.MaxSize - self.iso.get_auto_blob_size())
+                self.ui.fileSystemStartInfoTextBox.setPlainText(
+                    f"0x{item.node._fileoffset:X}")
             return True, None
         else:
             newPos = min(position, self.iso.MaxSize - 4) & -4
             if item.node._position != newPos:
                 item.node._position = newPos
-                self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
+                self.iso.pre_calc_metadata(
+                    self.iso.MaxSize - self.iso.get_auto_blob_size())
 
-            self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._position:X}")
+            self.ui.fileSystemStartInfoTextBox.setPlainText(
+                f"0x{item.node._position:X}")
             return True, None
 
     def _disable_node(self, item: FSTTreeItem):
@@ -907,7 +1013,8 @@ class Controller(QMainWindow):
                 else:
                     region = self.iso.bootinfo.countryCode - 1
 
-                self.iso.bnr = BNR(self.iso.dataPath / item.node.path, region=region)
+                self.iso.bnr = BNR(self.iso.dataPath /
+                                   item.node.path, region=region)
                 self.bnr_reset_info()
         else:
             item.node._exclude = True
@@ -916,13 +1023,16 @@ class Controller(QMainWindow):
                 self.bnr_reset_info()
 
         item.setDisabled(item.node._exclude)
-        self.iso.pre_calc_metadata(self.iso.MaxSize - self.iso.get_auto_blob_size())
-        self.ui.fileSystemStartInfoTextBox.setPlainText(f"0x{item.node._fileoffset:X}")
+        self.iso.pre_calc_metadata(
+            self.iso.MaxSize - self.iso.get_auto_blob_size())
+        self.ui.fileSystemStartInfoTextBox.setPlainText(
+            f"0x{item.node._fileoffset:X}")
 
     @staticmethod
     def _open_path_in_explorer(path: Path):
         if sys.platform == "win32":
-            subprocess.Popen(f"explorer /select,\"{path.resolve()}\"", shell=True)
+            subprocess.Popen(
+                f"explorer /select,\"{path.resolve()}\"", shell=True)
         elif sys.platform == "linux":
             subprocess.Popen(["xdg-open", path.resolve()])
         elif sys.platform == "darwin":
@@ -997,22 +1107,30 @@ class Controller(QMainWindow):
                                                    "}")
 
 
-class ProgressHandler(QThread):
+class ProgressHandler(FlagThread):
     def __init__(self, controller: Controller, t: threading.Thread, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.controller = controller
         self.watched = t
+        self.setObjectName(f"{self.__class__.__name__}.{t.getName()}")
+        ThreadManager.register(self)
+
+    def __del__(self):
+        ThreadManager.unregister(self)
 
     def run(self):
         self.controller.ui.operationProgressBar.setTextVisible(True)
-        self.controller.ui.operationProgressBar.setMaximum(self.controller.iso.progress.jobSize)
+        self.controller.ui.operationProgressBar.setMaximum(
+            self.controller.iso.progress.jobSize)
         self.controller.ui.operationProgressBar.setValue(0)
 
         while self.controller.iso.progress.jobProgress < self.controller.iso.progress.jobSize and not self.watched.is_zombie():
-            self.controller.ui.operationProgressBar.setValue(self.controller.iso.progress.jobProgress)
+            self.controller.ui.operationProgressBar.setValue(
+                self.controller.iso.progress.jobProgress)
             time.sleep(0.01)
 
-        self.controller.ui.operationProgressBar.setValue(self.controller.iso.progress.jobProgress)
+        self.controller.ui.operationProgressBar.setValue(
+            self.controller.iso.progress.jobProgress)
 
 
 def _recursive_enable(parent):
@@ -1021,8 +1139,10 @@ def _recursive_enable(parent):
             member.setEnabled(True)
             _recursive_enable(member)
 
+
 def _extract_path_from_iso(controller: Controller, dest: Path, node: FSTNode):
     controller.iso.extract_path(node.path, dest)
+
 
 def _round_up_to_power_of_2(n):
     n -= 1

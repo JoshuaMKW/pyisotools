@@ -3,12 +3,14 @@ import sys
 import time
 
 from distutils.version import LooseVersion
+from typing import Union
 from urllib import request
 
 from bs4 import BeautifulSoup
-from PySide2.QtCore import Signal, QThread
+from PySide2.QtCore import Signal
 
 from .. import __version__
+from .flagthread import FlagThread
 
 class ReleaseData(object):
     def __init__(self, version: str = None, info: str = None, downloadLinks: list = None, parentURL: str = None):
@@ -21,7 +23,7 @@ class ReleaseData(object):
         return f"{self.__class__.__name__}<version={self.version}, info={self.info}, downloads={self.downloads}"
 
 
-class GitReleaseUpdateScraper(QThread):
+class GitReleaseUpdateScraper(FlagThread):
 
     updateFound = Signal(ReleaseData)
 
@@ -30,6 +32,7 @@ class GitReleaseUpdateScraper(QThread):
         self._owner = owner
         self._repo = repository
         self.skipCount = 0
+        self.setObjectName(f"{self.__class__.__name__}.{owner}.{repository}")
 
     def owner(self):
         return self._owner
@@ -53,7 +56,7 @@ class GitReleaseUpdateScraper(QThread):
             html = response.read()
         return html
 
-    def get_newest_version(self) -> [ReleaseData, str]:
+    def get_newest_version(self) -> Union[ReleaseData, str]:
         """ Returns newest release version """
         try:
             response = self.request_release_data()
@@ -72,8 +75,8 @@ class GitReleaseUpdateScraper(QThread):
         except request.URLError:
             return "Request failed, ensure you have a working internet connection and try again"
 
-    def run(self, period: float = 60.0):
-        while True:
+    def run(self, period: float = 1.0):
+        while True and not self.isQuitting():
             if self.skipCount <= 0:
                 self.skipCount = 0
                 

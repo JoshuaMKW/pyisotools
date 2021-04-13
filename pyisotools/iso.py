@@ -566,7 +566,6 @@ class GamecubeISO(ISOBase):
         self.isoPath = iso
         self.root = Path(iso.parent, "root").resolve()
         with iso.open("rb") as _rawISO:
-            _rawISO.seek(0)
             self.bootheader = Boot(_rawISO)
             self.bootinfo = BI2(_rawISO)
             self.apploader = Apploader(_rawISO)
@@ -574,7 +573,6 @@ class GamecubeISO(ISOBase):
             _rawISO.seek(self.bootheader.fstOffset)
             self._rawFST = BytesIO(_rawISO.read(self.bootheader.fstSize))
 
-        self._rawFST.seek(0)
         self.load_file_systemv(self._rawFST)
 
         if self.bootinfo.countryCode == BI2.Country.JAPAN:
@@ -781,7 +779,6 @@ class GamecubeISO(ISOBase):
         with path.open("r") as f:
             data = json.load(f)
 
-        print(self.bnr)
         self._init_tables(data)
 
         if "name" in data: #convert legacy to new

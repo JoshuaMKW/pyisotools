@@ -135,7 +135,10 @@ class BNR(RGB5A3):
     @io_preserve
     def magic(self) -> str:
         self._rawdata.seek(0)
-        return self._rawdata.read(4).decode("iso-8859-1")
+        _magic = self._rawdata.read(4).decode("iso-8859-1")
+        if _magic not in {"BNR1", "BNR2"}:
+            raise ValueError("BNR magic is invalid")
+        return _magic
 
     @magic.setter
     @io_preserve

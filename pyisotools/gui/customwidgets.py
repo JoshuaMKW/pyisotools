@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide2.QtCore import Qt
 from PySide2.QtGui import (QKeyEvent, QKeySequence, QRegExpValidator,
                            QTextOption)
-from PySide2.QtWidgets import *
+from PySide2.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem
 
 from ..fst import FSTNode
 
@@ -102,7 +102,7 @@ class FilteredPlainTextEdit(QPlainTextEdit):
         croppedPaste = text[:pasteLen]
 
         body = head + croppedPaste
-        whole = head + croppedPaste + tail[:max(self._maxlength - len(body), 0)]
+        whole = body + tail[:max(self._maxlength - len(body), 0)]
 
         self.setPlainText(whole)
         textCursor.setPosition(len(whole), textCursor.MoveMode.MoveAnchor)
