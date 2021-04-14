@@ -508,6 +508,9 @@ class GamecubeISO(ISOBase):
         else:
             raise InvalidFSTError(f"{self.root} is not a valid root folder")
 
+        if self.bnr:
+            self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
+
         self.progress.jobProgress += self.dol.size
         self._save_config_regen()
         self.progress.jobProgress = self.progress.jobSize
