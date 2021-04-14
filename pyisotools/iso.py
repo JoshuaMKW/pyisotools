@@ -335,6 +335,8 @@ class GamecubeISO(ISOBase):
 
         # -- Files -- #
 
+        self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
+
         with self.isoPath.open("wb") as f:
             self.bootheader.save(f)
             self.progress.jobProgress += 0x440
@@ -527,8 +529,12 @@ class GamecubeISO(ISOBase):
             self.progress.jobProgress += 0x2000
             self.apploader.save(f)
             self.dol.save(f, self.bootheader.dolOffset)
-
             self.progress.jobProgress += self.dol.size
+
+            bnrNode = self.find_by_path("opening.bnr")
+            if bnrNode:
+                f.seek(bnrNode._fileoffset)
+                f.write(self.bnr._rawdata.getvalue())
 
         self.progress.jobProgress = self.progress.jobSize
 
