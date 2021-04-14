@@ -523,16 +523,14 @@ class GamecubeISO(ISOBase):
         with self.isoPath.open("r+b") as f:
             self.bootheader.save(f)
             self.progress.jobProgress += 0x440
-
             self.bootinfo.save(f)
             self.progress.jobProgress += 0x2000
-
             self.apploader.save(f)
-
-            #f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
             self.dol.save(f, self.bootheader.dolOffset)
 
             self.progress.jobProgress += self.dol.size
+
+        self.progress.jobProgress = self.progress.jobSize
 
     def get_auto_blob_size(self) -> int:
         def _collect_size(node: FSTNode, _size: int):
