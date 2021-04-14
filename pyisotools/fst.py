@@ -197,12 +197,15 @@ class FSTNode(object):
         if self.is_file():
             return self._filesize
         else:
-            size = sum([node.size for node in self.rfiles(includedOnly=True)])
+            size = sum((node.size for node in self.rfiles(includedOnly=True)))
             return size
 
     def find_by_path(self, path: Union[Path, str], skipExcluded: bool = True) -> FSTNode:
         _path = str(path).lower()
-        doGlob = "?" in _path or "*" in path
+        doGlob = "?" in _path or "*" in _path
+
+        if _path == "" or _path == ".":
+            return self.rootnode
 
         for node in self.rfiles(includedOnly=skipExcluded):
             if doGlob:

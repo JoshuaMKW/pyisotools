@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
@@ -112,11 +111,7 @@ class ISOBase(_ISOInfo):
             self._locationTable = SortedDict(data["location"])
             self._excludeTable = SortedList(data["exclude"])
 
-    def _recursive_extract(self, path: Path, dest: Path, iso):
-        node = self.find_by_path(path)
-        if not node:
-            return
-
+    def _recursive_extract(self, node: FSTNode, dest: Path, iso, dumpPositions: bool = False):
         if node.is_file():
             iso.seek(node._fileoffset)
             dest.write_bytes(iso.read(node.size))
@@ -124,7 +119,10 @@ class ISOBase(_ISOInfo):
         else:
             dest.mkdir(parents=True, exist_ok=True)
             for child in node.children:
-                self._recursive_extract(path/child.name, dest/child.name, iso)
+                self._recursive_extract(child, dest/child.name, iso)
+
+        if dumpPositions:
+            self._locationTable[node.path] = node._fileoffset
 
     def _collect_size(self, size: int) -> int:
         for node in self.children:
@@ -245,14 +243,14 @@ class GamecubeISO(ISOBase):
 
     def is_dolphin_root(self) -> Path:
         if self.root:
-            folders = [x.name.lower() for x in self.root.iterdir() if x.is_dir()]
+            folders = {x.name.lower() for x in self.root.iterdir() if x.is_dir()}
             return "sys" in folders and "files" in folders and "&&systemdata" not in folders
         else:
             return False
 
     def is_gcr_root(self) -> Path:
         if self.root:
-            folders = [x.name.lower() for x in self.root.iterdir() if x.is_dir()]
+            folders = {x.name.lower() for x in self.root.iterdir() if x.is_dir()}
             return "&&systemdata" in folders
         else:
             return False
@@ -415,18 +413,7 @@ class GamecubeISO(ISOBase):
         self.progress.jobProgress += len(self._rawFST.getbuffer())
 
         self.dataPath.mkdir(parents=True, exist_ok=True)
-        with self.isoPath.open("rb") as _iso:
-            for child in self.rchildren():
-                _dest = self.dataPath / child.path
-                if child.is_file():
-                    with _dest.open("wb") as f:
-                        _iso.seek(child._fileoffset)
-                        f.write(_iso.read(child.size))
-                        self.progress.jobProgress += child.size
-                    if dumpPositions:
-                        self._locationTable[child.path] = child._fileoffset
-                else:
-                    _dest.mkdir(exist_ok=True)
+        self.extract_path("", self.dataPath.parent, dumpPositions)
 
         self.save_config()
         self.progress.jobProgress = self.progress.jobSize
@@ -542,7 +529,7 @@ class GamecubeISO(ISOBase):
 
             self.apploader.save(f)
 
-            f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
+            #f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
             self.dol.save(f, self.bootheader.dolOffset)
 
             self.progress.jobProgress += self.dol.size
@@ -565,6 +552,7 @@ class GamecubeISO(ISOBase):
     def init_from_iso(self, iso: Path):
         self.isoPath = iso
         self.root = Path(iso.parent, "root").resolve()
+
         with iso.open("rb") as _rawISO:
             self.bootheader = Boot(_rawISO)
             self.bootinfo = BI2(_rawISO)
@@ -663,11 +651,16 @@ class GamecubeISO(ISOBase):
         self.isoPath = Path(
             root.parent / f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}].iso").resolve()
 
-    def extract_path(self, path: Path, dest: Path):
+    def extract_path(self, path: Union[Path, str], dest: Union[Path, str], dumpPositions: bool = False):
+        if isinstance(path, str):
+            path = Path(path)
+
+        if isinstance(dest, str):
+            dest = Path(dest)
+
         self.progress.set_ready(False)
 
         node = self.find_by_path(path)
-
         if not node:
             return
 
@@ -676,7 +669,7 @@ class GamecubeISO(ISOBase):
         self.progress.set_ready(True)
 
         with self.isoPath.open("rb") as _rawISO:
-            self._recursive_extract(path, dest / node.name, _rawISO)
+            self._recursive_extract(node, dest / node.name, _rawISO, dumpPositions)
 
         self.progress.jobProgress = self.progress.jobSize
 

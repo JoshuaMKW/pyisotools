@@ -263,6 +263,8 @@ class Controller(QMainWindow):
             if isinstance(thread, FlagThread):
                 thread.quit()
                 thread.wait()
+            elif isinstance(thread, StoppableThread):
+                thread._zombie = True
         event.accept()
 
     def notify_update(self, releaseInfo: ReleaseData):
