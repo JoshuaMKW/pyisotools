@@ -469,6 +469,7 @@ class Controller(QMainWindow):
         if self.bnrImagePath.is_file():
             if self.bnrImagePath.suffix == ".bnr":
                 self.iso.bnr.rawImage = BNR(self.bnrImagePath).rawImage
+                self.bnr_update_info()
             else:
                 with Image.open(self.bnrImagePath) as image:
                     if image.size != (96, 32):
@@ -476,8 +477,11 @@ class Controller(QMainWindow):
                             f"Resizing image of size {image.size} to match BNR size (96, 32)", self)
                         dialog.exec_()
                     self.iso.bnr.rawImage = image
+                pixmap = ImageQt.toqpixmap(self.iso.bnr.getImage())
+                pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
+                ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
+                self.ui.bannerImageView.setPixmap(pixmap)
 
-            self.bnr_update_info()
             return True, None
         else:
             return False, "The file does not exist!"
