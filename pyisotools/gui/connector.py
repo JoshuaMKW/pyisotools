@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import pickle
+from pyisotools.gui.mainwindow import Ui_MainWindow
 import subprocess
 import sys
 import threading
@@ -10,10 +11,10 @@ import traceback
 import webbrowser
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Dict, Tuple, Union
 
 from PIL import Image, ImageQt
-from PySide2.QtCore import QEvent, Qt, Signal
+from PySide2.QtCore import QEvent, Qt
 from PySide2.QtGui import QIcon
 from PySide2.QtWidgets import (QAction, QDialog, QFileDialog,
                                QFrame, QMainWindow, QMenu,
@@ -22,7 +23,7 @@ from PySide2.QtWidgets import (QAction, QDialog, QFileDialog,
 from .. import __version__
 from ..bi2 import BI2
 from ..bnrparser import BNR
-from ..iso import FSTNode, GamecubeISO
+from ..iso import FSTNode, GamecubeISO, WiiISO
 from .customwidgets import FSTTreeItem
 from .flagthread import FlagThread
 from .nodewindow import Ui_NodeFieldWindow
@@ -158,6 +159,23 @@ def notify_status(context: JobDialogState):
     return decorater_inner
 
 
+__func_guarded = {}
+
+
+def guard(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        global __func_guarded
+        isGuarded = __func_guarded.setdefault(func, False)
+        if isGuarded:
+            return
+        __func_guarded[func] = True
+        value = func(*args, **kwargs)
+        __func_guarded[func] = False
+        return value
+    return wrapper
+
+
 class StoppableThread(threading.Thread):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -230,21 +248,22 @@ class Controller(QMainWindow):
         DARK = resource_path(Path("themes", "dark.qss"))
         LIGHT = resource_path(Path("themes", "light.qss"))
 
-    def __init__(self, ui, *args, **kwargs):
+    def __init__(self, ui: Ui_MainWindow, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.iso = None
+        self.iso: Union[GamecubeISO, WiiISO] = None
 
         self.ui = ui
         self.theme = Controller.Themes.LIGHT
 
-        self.bnrImagePath = None
-        self.buildPath = None
-        self.extractPath = None
-        self.rootPath = None
-        self.genericPath = None
+        self.bnrImagePath: Path = None
+        self.buildPath: Path = None
+        self.extractPath: Path = None
+        self.rootPath: Path = None
+        self.genericPath: Path = None
+        self.bnrMap: Dict[str, BNR] = {}
 
         self._fromIso = False
-        self._viewPath = None
+        self._viewPath: Path = None
 
         self.updater = GitReleaseUpdateScraper("JoshuaMKW", "pyisotools")
         self.updater.updateFound.connect(self.notify_update)
@@ -309,11 +328,11 @@ class Controller(QMainWindow):
         if self.rootPath.is_file():
             self.iso = GamecubeISO.from_iso(self.rootPath)
             self._fromIso = True
-            self.update_all()
             self.ui.actionClose.setEnabled(True)
             self.ui.actionSave.setEnabled(True)
             self.ui.actionRebuild.setEnabled(False)
             self.ui.actionExtract.setEnabled(True)
+            self.update_all()
         else:
             return False, "The file does not exist!"
 
@@ -342,13 +361,17 @@ class Controller(QMainWindow):
 
         self.rootPath = selected
         if self.rootPath.is_dir():
-            self.iso = GamecubeISO.from_root(self.rootPath, True)
             self._fromIso = False
-            self.update_all()
+            self.iso = GamecubeISO.from_root(self.rootPath, True)
+            self.bnrMap = self.iso.bnr
+            self.ui.bannerComboBox.clear()
+            self.ui.bannerComboBox.addItems(sorted(
+                [p.name for p in self.iso.rchildren() if fnmatch(p.name, "*.bnr")], key=str.lower))
             self.ui.actionClose.setEnabled(True)
             self.ui.actionSave.setEnabled(True)
             self.ui.actionRebuild.setEnabled(True)
             self.ui.actionExtract.setEnabled(False)
+            self.update_all()
         else:
             return False, "The file does not exist!"
 
@@ -453,11 +476,27 @@ class Controller(QMainWindow):
 
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def bnr_load_dialog(self) -> Tuple[bool, str]:
+        supportedFormats = {"*.bmp": "Windows Bitmap",
+                            "*.bnr": "Nintendo Banner",
+                            "*.ico": "Windows Icon",
+                            "*.jpg|*.jpeg": "JPEG Image",
+                            "*.png": "Portable Network Graphics",
+                            "*.ppm": "Portable Pixmap",
+                            "*.tga": "BMP Image",
+                            "*.tif": "Tagged Image",
+                            "*.webp": "WEBP Image"
+                            }
+
+        _allsupported = " ".join([" ".join(k.split("|"))
+                                  for k in supportedFormats])
+        _filter = f"All supported formats ({_allsupported});;" + ";;".join(
+            [f"{supportedFormats[k]} ({' '.join(k.split('|'))})" for k in supportedFormats]) + ";;All files (*)"
+
         dialog = QFileDialog(parent=self,
                              caption="Open Image",
                              directory=str(
                                  self.bnrImagePath.parent if self.bnrImagePath else Path.home()),
-                             filter="PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;Nintendo BNR Image Info (*.bnr);;All files (*)")
+                             filter=_filter)
 
         dialog.setFileMode(QFileDialog.ExistingFile)
 
@@ -468,7 +507,7 @@ class Controller(QMainWindow):
 
         if self.bnrImagePath.is_file():
             if self.bnrImagePath.suffix == ".bnr":
-                self.iso.bnr.rawImage = BNR(self.bnrImagePath).rawImage
+                self.bnrMap.rawImage = BNR(self.bnrImagePath).rawImage
                 self.bnr_update_info()
             else:
                 with Image.open(self.bnrImagePath) as image:
@@ -476,8 +515,8 @@ class Controller(QMainWindow):
                         dialog = JobWarningDialog(
                             f"Resizing image of size {image.size} to match BNR size (96, 32)", self)
                         dialog.exec_()
-                    self.iso.bnr.rawImage = image
-                pixmap = ImageQt.toqpixmap(self.iso.bnr.getImage())
+                    self.bnrMap.rawImage = image
+                pixmap = ImageQt.toqpixmap(self.bnrMap.getImage())
                 pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
                 ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
                 self.ui.bannerImageView.setPixmap(pixmap)
@@ -502,7 +541,7 @@ class Controller(QMainWindow):
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
-        image = self.iso.bnr.getImage()
+        image = self.bnrMap.getImage()
         image.save(self.bnrImagePath)
 
         return True, None
@@ -518,54 +557,87 @@ class Controller(QMainWindow):
         self.ui.bannerLanguageComboBox.setItemText(0, "")
         self.ui.bannerVersionTextBox.setPlainText("")
         self.ui.bannerImageView.clear()
-        self.bnr_update_info()
+        self.ui.bannerImageView.setFrameShape(QFrame.Shape.Box)
 
-    def bnr_update_info(self):
-        if not self.iso.bnr:
+        if self._fromIso:
+            with self.iso.isoPath.open("rb") as _rawISO:
+                for node in self.iso.rchildren():
+                    if node.is_file() and fnmatch(node.name, "*.bnr"):
+                        _rawISO.seek(node._fileoffset)
+                        self.bnrMap[node.path] = BNR.from_data(
+                            _rawISO, size=node.size)
+
+        self.ui.bannerComboBox.clear()
+        self.ui.bannerComboBox.addItems(sorted(
+            [p.path for p in self.iso.rchildren() if fnmatch(p.name, "*.bnr")], key=str.lower))
+
+    def bnr_update_info(self, *args):
+        if not self.bnrMap:
             return
 
         self.ui.bannerGroupBox.setEnabled(True)
-        self.ui.bannerLanguageComboBox.setItemText(0, "English")
 
-        pixmap = ImageQt.toqpixmap(self.iso.bnr.getImage())
+        bnrComboBox = self.ui.bannerComboBox
+        bnrLangComboBox = self.ui.bannerLanguageComboBox
+        bnrEncodingComboBox = self.ui.bannerEncodingComboBox
+
+        bnrComboBox.blockSignals(True)
+        bnrLangComboBox.blockSignals(True)
+        bnrEncodingComboBox.blockSignals(True)
+
+        bnrLangComboBox.setItemText(0, "English")
+        bnrEncodingComboBox.clear()
+        bnrEncodingComboBox.addItems(["ascii", "shift-jis"])
+
+        bnr = self.bnrMap[bnrComboBox.currentText()]
+
+        pixmap = ImageQt.toqpixmap(bnr.getImage())
         pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
         ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
         self.ui.bannerImageView.setPixmap(pixmap)
         self.ui.bannerImageView.setFrameShape(QFrame.NoFrame)
 
-        self.ui.bannerVersionTextBox.setPlainText(self.iso.bnr.magic)
-        if self.iso.bnr.region == "NTSC-J":
-            self.ui.bannerLanguageComboBox.setItemText(0, "Japanese")
-            self.ui.bannerLanguageComboBox.setCurrentIndex(0)
-            self.ui.bannerLanguageComboBox.setEnabled(False)
-        elif self.iso.bnr.region == "NTSC-U":
-            self.ui.bannerLanguageComboBox.setCurrentIndex(0)
-            self.ui.bannerLanguageComboBox.setEnabled(False)
+        self.ui.bannerVersionTextBox.setPlainText(bnr.magic)
+        if bnr.magic == "BNR2":
+            bnr.index = bnrLangComboBox.currentIndex()
+            bnrLangComboBox.setEnabled(True)
         else:
-            self.iso.bnr.index = self.ui.bannerLanguageComboBox.currentIndex()
-            self.ui.bannerLanguageComboBox.setEnabled(True)
+            bnr.index = 0
+            bnrLangComboBox.setCurrentIndex(0)
+            bnrLangComboBox.setEnabled(False)
+
+        if bnr.region == "NTSC-J":
+            bnrLangComboBox.setItemText(0, "Japanese")
+        else:
+            bnrLangComboBox.setItemText(0, "English")
 
         self.ui.bannerVersionTextBox.setEnabled(False)
 
-        self.ui.bannerShortNameTextBox.setPlainText(self.iso.bnr.gameName)
-        self.ui.bannerLongNameTextBox.setPlainText(self.iso.bnr.gameTitle)
+        self.ui.bannerShortNameTextBox.setPlainText(bnr.gameName)
+        self.ui.bannerLongNameTextBox.setPlainText(bnr.gameTitle)
         self.ui.bannerShortMakerTextBox.setPlainText(
-            self.iso.bnr.developerName)
+            bnr.developerName)
         self.ui.bannerLongMakerTextBox.setPlainText(
-            self.iso.bnr.developerTitle)
+            bnr.developerTitle)
         self.ui.bannerDescTextBox.setPlainText(
-            self.iso.bnr.gameDescription)
+            bnr.gameDescription)
+
+        bnrComboBox.blockSignals(False)
+        bnrLangComboBox.blockSignals(False)
+        bnrEncodingComboBox.blockSignals(False)
 
     def bnr_save_info(self):
-        if not self.iso.bnr:
+        if len(self.bnrMap) == 0:
             return
 
-        self.iso.bnr.index = self.ui.bannerLanguageComboBox.currentIndex()
-        self.iso.bnr.gameName = self.ui.bannerShortNameTextBox.toPlainText()
-        self.iso.bnr.gameTitle = self.ui.bannerLongNameTextBox.toPlainText()
-        self.iso.bnr.developerName = self.ui.bannerShortMakerTextBox.toPlainText()
-        self.iso.bnr.developerTitle = self.ui.bannerLongMakerTextBox.toPlainText()
-        self.iso.bnr.gameDescription = self.ui.bannerDescTextBox.toPlainText()
+        bnr = self.bnrMap[self.ui.bannerComboBox.currentText()]
+
+        bnr.index = self.ui.bannerLanguageComboBox.currentIndex()
+        bnr.gameName = self.ui.bannerShortNameTextBox.toPlainText()
+        bnr.gameTitle = self.ui.bannerLongNameTextBox.toPlainText()
+        bnr.developerName = self.ui.bannerShortMakerTextBox.toPlainText()
+        bnr.developerTitle = self.ui.bannerLongMakerTextBox.toPlainText()
+        bnr.gameDescription = self.ui.bannerDescTextBox.toPlainText()
 
     def help_about(self):
         desc = "".join(["pyisotools is a tool for extracting and building Gamecube ISOs.\n",
@@ -670,6 +742,7 @@ class Controller(QMainWindow):
 
         self.load_file_system()
         self.bnr_reset_info()
+        self.bnr_update_info()
 
         self.ui.isoNameTextBox.setPlainText(self.iso.bootheader.gameName)
         self.ui.isoGameCodeTextBox.setPlainText(self.iso.bootheader.gameCode)
@@ -694,7 +767,6 @@ class Controller(QMainWindow):
     @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def save_all(self, showjob: bool = True):
         _boot = self.iso.bootheader
-        _bi2 = self.iso.bootinfo
         _appldr = self.iso.apploader
 
         _boot.gameName = self.ui.isoNameTextBox.toPlainText()
@@ -1009,9 +1081,12 @@ class Controller(QMainWindow):
             return True, None
 
     def _disable_node(self, item: FSTTreeItem):
-        if item.node._exclude:
-            item.node._exclude = False
-            if len(item.node.path.split("/")) == 1 and item.node.is_file() and fnmatch(item.node.path, "*opening.bnr"):
+        node = item.node
+        isRootFile = node.parent.is_root() and node.is_file()
+        isAnyBNR = fnmatch(node.name, "*.bnr")
+        if node._exclude:
+            node._exclude = False
+            if isRootFile and isAnyBNR:
                 if self.iso.bootinfo.countryCode == BI2.Country.JAPAN:
                     region = 2
                 elif self.iso.bootinfo.countryCode == BI2.Country.KOREA:
@@ -1019,14 +1094,18 @@ class Controller(QMainWindow):
                 else:
                     region = self.iso.bootinfo.countryCode - 1
 
-                self.iso.bnr = BNR(self.iso.dataPath /
-                                   item.node.path, region=region)
-                self.bnr_reset_info()
+                if node.name == "opening.bnr":
+                    self.iso.bnr = BNR(self.iso.dataPath /
+                                       item.node.path, region=region)
+
+                self.bnrreset_info()
+                self.bnrupdate_info()
         else:
             item.node._exclude = True
-            if len(item.node.path.split("/")) == 1 and item.node.is_file() and fnmatch(item.node.path, "*opening.bnr"):
-                self.iso.bnr = None
-                self.bnr_reset_info()
+            if isRootFile and isAnyBNR:
+                if node.name == "opening.bnr":
+                    self.iso.bnr = None
+                self.bnrreset_info()
 
         item.setDisabled(item.node._exclude)
         self.iso.pre_calc_metadata(

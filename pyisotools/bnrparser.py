@@ -11,7 +11,7 @@ from typing import Union
 from PIL import Image
 
 
-def _read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "iso-8859-1") -> str:
+def _read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ansi") -> str:
     io.seek(offset)
     cString = io.read(maxlen)
     return cString.rstrip(b"\x00").decode(encoding)
@@ -135,7 +135,7 @@ class BNR(RGB5A3):
     @io_preserve
     def magic(self) -> str:
         self._rawdata.seek(0)
-        _magic = self._rawdata.read(4).decode("iso-8859-1")
+        _magic = self._rawdata.read(4).decode("ansi")
         if _magic not in {"BNR1", "BNR2"}:
             raise ValueError("BNR magic is invalid")
         return _magic
@@ -181,7 +181,7 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def gameName(self) -> str:
-        return _read_string(self._rawdata, 0x1820 + (self.index * 0x140), 0x20, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return _read_string(self._rawdata, 0x1820 + (self.index * 0x140), 0x20, encoding="ansi" if self.region != "NTSC-J" else "shift-jis")
 
     @gameName.setter
     @io_preserve
@@ -189,12 +189,12 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x1820 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x20)
         self._rawdata.seek(0x1820 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(bytes(name[:0x1F], "ansi" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
     def developerName(self) -> str:
-        return _read_string(self._rawdata, 0x1840 + (self.index * 0x140), 0x20, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return _read_string(self._rawdata, 0x1840 + (self.index * 0x140), 0x20, encoding="ansi" if self.region != "NTSC-J" else "shift-jis")
 
     @developerName.setter
     @io_preserve
@@ -202,12 +202,12 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x1840 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x20)
         self._rawdata.seek(0x1840 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(bytes(name[:0x1F], "ansi" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
     def gameTitle(self) -> str:
-        return _read_string(self._rawdata, 0x1860 + (self.index * 0x140), 0x40, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return _read_string(self._rawdata, 0x1860 + (self.index * 0x140), 0x40, encoding="ansi" if self.region != "NTSC-J" else "shift-jis")
 
     @gameTitle.setter
     @io_preserve
@@ -215,12 +215,12 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x1860 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x40)
         self._rawdata.seek(0x1860 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(bytes(name[:0x3F], "ansi" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
     def developerTitle(self) -> str:
-        return _read_string(self._rawdata, 0x18A0 + (self.index * 0x140), 0x40, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return _read_string(self._rawdata, 0x18A0 + (self.index * 0x140), 0x40, encoding="ansi" if self.region != "NTSC-J" else "shift-jis")
 
     @developerTitle.setter
     @io_preserve
@@ -228,12 +228,12 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x18A0 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x40)
         self._rawdata.seek(0x18A0 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(bytes(name[:0x3F], "ansi" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
     def gameDescription(self) -> str:
-        return _read_string(self._rawdata, 0x18E0 + (self.index * 0x140), 0x80, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return _read_string(self._rawdata, 0x18E0 + (self.index * 0x140), 0x80, encoding="ansi" if self.region != "NTSC-J" else "shift-jis")
 
     @gameDescription.setter
     @io_preserve
@@ -241,7 +241,7 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x18E0 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x80)
         self._rawdata.seek(0x18E0 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x7F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(bytes(name[:0x7F], "ansi" if self.region != "NTSC-J" else "shift-jis"))
 
     def getImage(self) -> Image:
         _image = self.rawImage
