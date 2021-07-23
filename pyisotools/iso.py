@@ -542,19 +542,15 @@ class GamecubeISO(ISOBase):
         self.progress.jobProgress = self.progress.jobSize
 
     def get_auto_blob_size(self) -> int:
-        def _collect_size(node: FSTNode, _size: int):
-            for child in node.children:
-                if child._exclude or child._position:
-                    continue
-                
-                if child.is_file():
-                    _size = align_int(_size, child._alignment) + child.size
-                else:
-                    _size = _collect_size(child, _size)
+        _size = 0
 
-            return _size
+        for child in self.rfiles(includedOnly=True):
+            if child._position:
+                continue
+            
+            _size = align_int(_size, child._alignment) + child.size
 
-        return _collect_size(self, 0)
+        return _size
 
     def init_from_iso(self, iso: Path):
         self.isoPath = iso
@@ -751,7 +747,7 @@ class GamecubeISO(ISOBase):
             ignoreList.extend(self._excludeTable)
 
         self._load_from_path(path, parentnode, ignoreList)
-        self.pre_calc_metadata(self.MaxSize - self.get_auto_blob_size())
+        self.pre_calc_metadata((self.MaxSize - self.get_auto_blob_size()) & -self._get_greatest_alignment())
 
     def load_file_systemv(self, fst):
         """
