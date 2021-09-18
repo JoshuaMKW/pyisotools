@@ -6,7 +6,7 @@ from enum import Enum
 from fnmatch import fnmatch
 from io import BufferedIOBase, BytesIO, IOBase, RawIOBase, StringIO
 from pathlib import Path
-from typing import BinaryIO, Dict, Iterable, List, Optional, TextIO, Union
+from typing import BinaryIO, Dict, Iterable, List, Optional, TextIO, Tuple, Union
 from .iohelper import read_string, read_ubyte, read_uint32, write_uint32
 
 
@@ -143,7 +143,7 @@ class FSTFile(BytesIO, FSTNode):
 
         self.name = name
         self._alignment = alignment
-        self._positionInfo = tuple(offset, offset is not None)
+        self._positionInfo: Tuple[int, bool] = tuple(offset, offset is not None)
         self._active = True
 
     @classmethod
@@ -569,10 +569,14 @@ class FileSystemTable(FSTRoot):
 
         return fst
 
-    def write_physical(self, dst: Union[str, Path], onlyActive: bool = False):
-        ...
+    def to_physical(self, dst: Union[str, Path], onlyActive: bool = False):
+        if isinstance(dst, str):
+            dst = Path(dst)
 
-    def write_virtual(self, fst: BinaryIO, dataIO: BinaryIO, onlyActive: bool = False) -> BytesIO:
+        with dst.open("wb") as f:
+            self.to_virtual(f, None, onlyActive)
+
+    def to_virtual(self, fst: BinaryIO, dataIO: BinaryIO, onlyActive: bool = False) -> BytesIO:
         _strTableOfs = len(self) * 0xC  # Get the offset to the string table
 
         _oldpos = fst.tell()
@@ -598,6 +602,56 @@ class FileSystemTable(FSTRoot):
             fst.write(child.name.encode("shift-jis") + b"\x00")
             _strOfs += len(child.name) + 1
             fst.seek(_oldpos)
+
+    def realize(self, pathfst: Union[str, Path], pathdata: Union[str, Path]):
+        if isinstance(pathfst, str):
+            pathfst = Path(pathfst)
+
+        if isinstance(pathdata, str):
+            pathdata = Path(pathdata)
+
+        if not pathfst.parent.exists():
+            pathfst.parent.mkdir(parents=True, exist_ok=True)
+
+        if not pathdata.exists():
+            pathdata.mkdir(parents=True, exist_ok=True)
+
+        # -- Write FST and create file system together -- #
+
+        with pathfst.open("wb") as fst:
+            _strTableOfs = len(self) * 0xC  # Get the offset to the string table
+
+            _oldpos = fst.tell()
+            fst.write(b"\x00"*_strTableOfs)
+            fst.seek(_oldpos)
+
+            fst.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
+            write_uint32(fst, len(self))
+
+            _idCache = dict()
+            
+            _strOfs = 0
+            for i, child in enumerate(self.recurse_children(), start=1):
+                _idCache[child.path] = i
+                fst.write(b"\x01" if child.is_dir() else b"\x00")
+                fst.write(_strOfs.to_bytes(3, "big", signed=False))
+                write_uint32(fst, _idCache[child.parent.name] if child.is_dir() else child.position)
+                write_uint32(fst, len(child) +
+                            i if child.is_dir() else child.size)
+
+                _oldpos = fst.tell()
+                fst.seek(_strOfs + _strTableOfs)
+                fst.write(child.name.encode("shift-jis") + b"\x00")
+                _strOfs += len(child.name) + 1
+                fst.seek(_oldpos)
+
+                pdst = pathdata / child.path
+                if child.is_file():
+                    pdst.write_bytes(child.getvalue())
+                elif child.is_dir():
+                    pdst.mkdir(parents=True, exist_ok=True)
+
+            
 
             
 

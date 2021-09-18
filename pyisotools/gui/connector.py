@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import functools
+from io import BytesIO
 import pickle
+from types import TracebackType
 from pyisotools.gui.mainwindow import Ui_MainWindow
 import subprocess
 import sys
@@ -16,7 +18,7 @@ from typing import Dict, Tuple, Union
 from PIL import Image, ImageQt
 from PySide2.QtCore import QEvent, Qt
 from PySide2.QtGui import QIcon
-from PySide2.QtWidgets import (QAction, QDialog, QFileDialog,
+from PySide2.QtWidgets import (QAction, QDial, QDialog, QFileDialog,
                                QFrame, QMainWindow, QMenu,
                                QMessageBox)
 
@@ -32,7 +34,7 @@ from .updatewindow import Ui_UpdateDialog
 from .workpathing import get_program_folder, resource_path
 
 
-class ProgramState:
+class ProgramState(object):
     _GLOBAL_STATE = [True, ""]
 
     @staticmethod
@@ -50,11 +52,11 @@ class ProgramState:
         ProgramState._GLOBAL_STATE[1] = msg
 
     @staticmethod
-    def is_error(msg: str = ""):
+    def is_error():
         return ProgramState._GLOBAL_STATE[0] == False
 
     @staticmethod
-    def is_success(msg: str = ""):
+    def is_success():
         return ProgramState._GLOBAL_STATE[0] == True
 
     @staticmethod
@@ -62,7 +64,7 @@ class ProgramState:
         ProgramState._GLOBAL_STATE = [True, ""]
 
 
-class ThreadManager:
+class ThreadManager(object):
     _THREAD_COLLECTION = {}
 
     @staticmethod
@@ -73,7 +75,7 @@ class ThreadManager:
             ThreadManager._THREAD_COLLECTION[t.getName()] = t
 
     @staticmethod
-    def unregister(t: Union[FlagThread, threading.Thread]):
+    def deregister(t: Union[FlagThread, threading.Thread]):
         if isinstance(t, FlagThread):
             ThreadManager._THREAD_COLLECTION.pop(t.objectName())
         else:
@@ -85,7 +87,7 @@ class ThreadManager:
             yield thread
 
 
-def excepthook(args: tuple):
+def excepthook(args: Tuple[BaseException, TracebackType, int, Union[threading.Thread, FlagThread]]):
     ProgramState.set_error(
         "".join(traceback.format_exception(args[0], args[1], args[2])))
     args[3]._zombie = True
@@ -94,13 +96,13 @@ def excepthook(args: tuple):
 threading.excepthook = excepthook
 
 
-def notify_status(context: JobDialogState):
+def notify_status(notification: Union[str, QDialog], context: JobDialogState):
     """ Wrapped function must return a (Controller, bool, str) tuple to indicate a status, and show message """
     def decorater_inner(func):
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Controller, **kwargs):
             try:
-                value = func(*args, **kwargs)
+                successful = func(*args, **kwargs)
             except Exception:
                 dialog = JobFailedDialog(
                     args[0], info="".join(traceback.format_exc()))
@@ -117,44 +119,44 @@ def notify_status(context: JobDialogState):
                 args[0].ui.operationProgressBar.setTextVisible(False)
                 args[0].ui.operationProgressBar.setValue(0)
                 ProgramState.reset()
-            elif issubclass(type(value[1]), QDialog):
-                if value[0] is False and (context & JobDialogState.SHOW_FAILURE):
-                    value[1].exec_()
-                if value[0] is True and (context & JobDialogState.SHOW_COMPLETE):
-                    value[1].exec_()
-                if value[0] is False and (context & JobDialogState.SHOW_FAILURE_WHEN_MESSAGE):
-                    value[1].exec_()
-                if value[0] is True and (context & JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE):
-                    value[1].exec_()
-                if value[0] is True and (context & JobDialogState.SHOW_WARNING_WHEN_MESSAGE):
-                    value[1].exec_()
+            elif issubclass(type(notification), QDialog):
+                if not successful and (context & JobDialogState.SHOW_FAILURE):
+                    notification.exec_()
+                if successful and (context & JobDialogState.SHOW_COMPLETE):
+                    notification.exec_()
+                if not successful and (context & JobDialogState.SHOW_FAILURE_WHEN_MESSAGE):
+                    notification.exec_()
+                if successful and (context & JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE):
+                    notification.exec_()
+                if successful and (context & JobDialogState.SHOW_WARNING_WHEN_MESSAGE):
+                    notification.exec_()
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
                     args[0].ui.operationProgressBar.setTextVisible(False)
                     args[0].ui.operationProgressBar.setValue(0)
             else:
-                if value[0] is False and (context & JobDialogState.SHOW_FAILURE):
-                    dialog = JobFailedDialog(args[0], info=value[1])
+                if not successful and (context & JobDialogState.SHOW_FAILURE):
+                    dialog = JobFailedDialog(args[0], info=notification)
                     dialog.exec_()
-                if value[0] is True and (context & JobDialogState.SHOW_COMPLETE):
-                    dialog = JobCompleteDialog(args[0], info=value[1])
+                if successful and (context & JobDialogState.SHOW_COMPLETE):
+                    dialog = JobCompleteDialog(args[0], info=notification)
                     dialog.exec_()
-                if value[0] is False and (context & JobDialogState.SHOW_FAILURE_WHEN_MESSAGE):
-                    if value[1]:
-                        dialog = JobFailedDialog(args[0], info=value[1])
+                if not successful and (context & JobDialogState.SHOW_FAILURE_WHEN_MESSAGE):
+                    if notification:
+                        dialog = JobFailedDialog(args[0], info=notification)
                         dialog.exec_()
-                if value[0] is True and (context & JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE):
-                    if value[1]:
-                        dialog = JobCompleteDialog(args[0], info=value[1])
+                if successful and (context & JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE):
+                    if notification:
+                        dialog = JobCompleteDialog(args[0], info=notification)
                         dialog.exec_()
-                if value[0] is True and (context & JobDialogState.SHOW_WARNING_WHEN_MESSAGE):
-                    if value[1]:
-                        dialog = JobWarningDialog(value[1], args[0])
+                if successful and (context & JobDialogState.SHOW_WARNING_WHEN_MESSAGE):
+                    if notification:
+                        dialog = JobWarningDialog(notification, args[0])
                         dialog.exec_()
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
                     args[0].ui.operationProgressBar.setTextVisible(False)
                     args[0].ui.operationProgressBar.setValue(0)
 
-            return value
+            return successful
         return wrapper
     return decorater_inner
 
@@ -474,8 +476,8 @@ class Controller(QMainWindow):
 
         return True, None
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
-    def bnr_load_dialog(self) -> Tuple[bool, str]:
+    @notify_status("The file does not exist!", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
+    def bnr_load_dialog(self) -> bool:
         supportedFormats = {"*.bmp": "Windows Bitmap",
                             "*.bnr": "Nintendo Banner",
                             "*.ico": "Windows Icon",
@@ -507,7 +509,8 @@ class Controller(QMainWindow):
 
         if self.bnrImagePath.is_file():
             if self.bnrImagePath.suffix == ".bnr":
-                self.bnrMap.rawImage = BNR(self.bnrImagePath).rawImage
+                self.bnrMap.rawImage = BytesIO(
+                    self.bnrImagePath.read_bytes()[0x20:0x1820])
                 self.bnr_update_info()
             else:
                 with Image.open(self.bnrImagePath) as image:
@@ -1193,7 +1196,7 @@ class Controller(QMainWindow):
 
 
 class ProgressHandler(FlagThread):
-    def __init__(self, controller: Controller, t: threading.Thread, *args, **kwargs):
+    def __init__(self, controller: Controller, t: FlagThread, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.controller = controller
         self.watched = t
@@ -1201,7 +1204,7 @@ class ProgressHandler(FlagThread):
         ThreadManager.register(self)
 
     def __del__(self):
-        ThreadManager.unregister(self)
+        ThreadManager.deregister(self)
 
     def run(self):
         self.controller.ui.operationProgressBar.setTextVisible(True)
@@ -1209,13 +1212,17 @@ class ProgressHandler(FlagThread):
             self.controller.iso.progress.jobSize)
         self.controller.ui.operationProgressBar.setValue(0)
 
-        while self.controller.iso.progress.jobProgress < self.controller.iso.progress.jobSize and not self.watched.is_zombie():
+        while self.controller.iso.progress.jobProgress < self.controller.iso.progress.jobSize and not self.watched.isFinished():
             self.controller.ui.operationProgressBar.setValue(
                 self.controller.iso.progress.jobProgress)
             time.sleep(0.01)
 
         self.controller.ui.operationProgressBar.setValue(
             self.controller.iso.progress.jobProgress)
+
+    def exit(self, retcode: int = ...):
+        super().exit(retcode)
+        ThreadManager.deregister(self)
 
 
 def _recursive_enable(parent):

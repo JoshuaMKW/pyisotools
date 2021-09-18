@@ -153,8 +153,7 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def rawImage(self) -> BytesIO:
-        self._rawdata.seek(0x20)
-        return BytesIO(self._rawdata.read(0x1800))
+        return BytesIO(self._rawdata.getvalue()[0x20:0x1820])
 
     @rawImage.setter
     @io_preserve
