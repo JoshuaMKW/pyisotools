@@ -243,7 +243,7 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x18E0 + (self.index * 0x140))
         self._rawdata.write(bytes(name[:0x7F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
 
-    def getImage(self) -> Image:
+    def getImage(self) -> Image.Image:
         _image = self.rawImage
         img = Image.new("RGBA", (BNR.ImageWidth, BNR.ImageHeight))
 
