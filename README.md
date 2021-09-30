@@ -14,6 +14,10 @@ python library for working with Gamecube ISOs (GCM)
 
 # TODO
 - Support Wii ISOs
+- ISO Partitions
+- Native archive support (U8 and RARC)
+- Native yaz0 and yay0 compression
+- Cross platform file drag-drop to/from pyisotools
 
 # Usage
 
