@@ -431,7 +431,6 @@ class Ui_MainWindow(object):
         self.fileSystemTreeWidget.itemClicked.connect(MainWindow.file_system_set_fields)
         self.actionSave.triggered.connect(MainWindow.save_all)
         self.actionDarkTheme.toggled.connect(MainWindow.update_theme)
-        self.actionCheckUpdates.toggled.connect(MainWindow._manage_settings_text)
 
         QMetaObject.connectSlotsByName(MainWindow)
     # setupUi

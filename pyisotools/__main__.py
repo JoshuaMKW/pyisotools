@@ -18,7 +18,7 @@ def main(argv: list = sys.argv[1:]):
         mainWindow = Controller(central)
         central.setupUi(mainWindow)
         mainWindow.load_program_config()
-        mainWindow._load_theme()
+        mainWindow.update_theme(mainWindow.theme)
         mainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", f"pyisotools v{__version__}", None))
         mainWindow.show()
         sys.exit(app.exec_())

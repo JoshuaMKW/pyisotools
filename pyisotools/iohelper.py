@@ -1,4 +1,7 @@
+from codecs import encode
 import struct
+from typing import BinaryIO, Optional
+from chardet import UniversalDetector
 
 def read_sbyte(f):
     return struct.unpack("b", f.read(1))[0]
@@ -54,17 +57,22 @@ def read_bool(f, vSize=1):
 def write_bool(f, val, vSize=1):
     f.write(b'\x00'*(vSize-1) + b'\x01') if val is True else f.write(b'\x00' * vSize)
 
-def read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "ascii") -> str:
+def read_string(io: BinaryIO, offset: int = 0, maxlen: int = 0, encoding: Optional[str] = None) -> str:
     """ Reads a null terminated string from the specified address """
+    io.seek(offset)
 
     length = 0
+    binary: bytes = io.read(1)
+    while binary[-1] != b"\x00" and (length < maxlen or maxlen <= 0):
+        binary += io.read(1)
 
-    io.seek(offset)
-    while io.read(1) != b"\x00" and (length < maxlen or maxlen <= 0):
-        length += 1
+    binary = binary[:-1]
 
-    io.seek(offset)
-    return io.read(length).decode(encoding)
+    if encoding is None:
+        encoder = UniversalDetector()
+        encoder.feed(binary)
+        encoding = encoder.close()["encoding"]
+    return binary.decode(encoding)
 
 def align_int(num: int, alignment: int) -> int:
     return (num + (alignment - 1)) & -alignment

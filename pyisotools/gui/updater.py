@@ -2,6 +2,8 @@ import re
 import sys
 import time
 
+from http.client import IncompleteRead
+
 from distutils.version import LooseVersion
 from typing import Union
 from urllib import request
@@ -20,7 +22,7 @@ class ReleaseData(object):
         self.parentURL = parentURL
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}<version={self.version}, info={self.info}, downloads={self.downloads}"
+        return f"{self.__class__.__name__}<version={self.version}, info={self.info}, downloads={self.downloads}>"
 
 
 class GitReleaseUpdateScraper(FlagThread):
@@ -31,7 +33,7 @@ class GitReleaseUpdateScraper(FlagThread):
         super().__init__(parent)
         self._owner = owner
         self._repo = repository
-        self.skipCount = 0
+        self.waitCycles = 0
         self.setObjectName(f"{self.__class__.__name__}.{owner}.{repository}")
 
     def owner(self):
@@ -50,11 +52,19 @@ class GitReleaseUpdateScraper(FlagThread):
     def gitReleasesPageURL(self) -> str:
         return f"https://github.com/{self._owner}/{self._repo}/releases/latest"
 
-    def request_release_data(self):
+    def request_release_data(self, maxTries: int = 10) -> str:
         """ Returns soup data of the repository releases tab """
+        responseJSON = b""
         with request.urlopen(self.gitReleasesPageURL) as response:
-            html = response.read()
-        return html
+            for _ in range(maxTries):
+                try:
+                    responseJSONpart = response.read()
+                except IncompleteRead as e:
+                    responseJSON += e.partial
+                    continue
+                else:
+                    return responseJSON + responseJSONpart
+            return None
 
     def get_newest_version(self) -> Union[ReleaseData, str]:
         """ Returns newest release version """
@@ -77,14 +87,14 @@ class GitReleaseUpdateScraper(FlagThread):
 
     def run(self, period: float = 1.0):
         while True and not self.isQuitting():
-            if self.skipCount <= 0:
-                self.skipCount = 0
+            if self.waitCycles <= 0:
+                self.waitCycles = 0
                 
                 info = self.get_newest_version()
                 if isinstance(info, ReleaseData) and LooseVersion(info.version.lstrip("v")) > LooseVersion(__version__.lstrip("v")):
                     self.updateFound.emit(info)
             else:
-                self.skipCount -= 1
+                self.waitCycles -= 1
             
             time.sleep(period)
 

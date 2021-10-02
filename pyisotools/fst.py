@@ -65,6 +65,10 @@ class FSTNode(ABC):
     @classproperty
     @abstractmethod
     def type(self) -> NodeType: ...
+    
+    @property
+    @abstractmethod
+    def children(self) -> Iterable[FSTNode]: ...
 
     @property
     @abstractmethod
@@ -182,6 +186,10 @@ class FSTFile(BytesIO, FSTNode):
             ((position + self._alignment) - 1) & ~self._alignment, True)
 
     @property
+    def children(self) -> Iterable[FSTNode]:
+        return None
+
+    @property
     def parent(self) -> FSTFolder:
         return self._parent
 
@@ -280,7 +288,7 @@ class FSTFolder(FSTNode):
         return FSTNode.NodeType.FOLDER
 
     @property
-    def children(self) -> Iterable[Union[FSTFile, FSTFolder]]:
+    def children(self) -> Iterable[FSTNode]:
         for child in sorted(self._children.values(), key=lambda x: x.name.upper()):
             yield child
 
@@ -350,7 +358,7 @@ class FSTFolder(FSTNode):
             else:
                 yield from node.recurse_files(enabledOnly=enabledOnly)
 
-    def recurse_children(self, enabledOnly: bool = False) -> Iterable[Union[FSTFile, FSTFolder]]:
+    def recurse_children(self, enabledOnly: bool = False) -> Iterable[FSTNode]:
         for node in self.children:
             if enabledOnly and node.is_active():
                 continue
@@ -522,19 +530,6 @@ class FileSystemTable(FSTRoot):
 
             io: BytesIO or opened file object containing the FST of an ISO
         """
-
-        if io.read(1) != b"\x01":
-            raise FSTInvalidError("Invalid Root flag found")
-        elif io.read(3) != b"\x00\x00\x00":
-            raise FSTInvalidError("Invalid Root string offset found")
-        elif io.read(4) != b"\x00\x00\x00\x00":
-            raise FSTInvalidError("Invalid Root offset found")
-
-        fst = cls()
-
-        curEntry: int = 1
-        strTabOfs: int = 0
-
         def _read_nodes(fst, io: BinaryIO) -> FSTNode:
             nonlocal strTabOfs
             nonlocal curEntry
@@ -560,8 +555,18 @@ class FileSystemTable(FSTRoot):
 
             return node
 
+        if io.read(1) != b"\x01":
+            raise FSTInvalidError("Invalid Root flag found")
+        elif io.read(3) != b"\x00\x00\x00":
+            raise FSTInvalidError("Invalid Root string offset found")
+        elif io.read(4) != b"\x00\x00\x00\x00":
+            raise FSTInvalidError("Invalid Root offset found")
+
+        fst = cls()
+
         entryCount = read_uint32(io)
         strTabOfs = entryCount * 0xC
+        curEntry = 1
 
         while curEntry < entryCount:
             child = _read_nodes(fst, io)
@@ -645,6 +650,7 @@ class FileSystemTable(FSTRoot):
                 _strOfs += len(child.name) + 1
                 fst.seek(_oldpos)
 
+                # Create physical file/folder in OS filesystem
                 pdst = pathdata / child.path
                 if child.is_file():
                     pdst.write_bytes(child.getvalue())

@@ -20,10 +20,12 @@ from pyisotools.iohelper import (align_int, read_string, read_ubyte,
 
 
 class FileSystemTooLargeError(Exception):
-    pass
+    ...
+
 
 class FileSystemInvalidError(Exception):
-    pass
+    ...
+
 
 class _Progress(object):
     def __init__(self):
@@ -36,7 +38,7 @@ class _Progress(object):
 
     def is_ready(self) -> bool:
         return self._isReady
-        
+
 
 class ISOBase(FileSystemTable):
 
@@ -69,7 +71,8 @@ class ISOBase(FileSystemTable):
         _size = read_uint32(fst)
 
         _oldpos = fst.tell()
-        node.name = read_string(fst, strTabOfs + _nameOfs, encoding="shift-jis")
+        node.name = read_string(
+            fst, strTabOfs + _nameOfs, encoding="shift-jis")
         fst.seek(_oldpos)
 
         node._id = self._curEntry
@@ -239,14 +242,16 @@ class GamecubeISO(ISOBase):
 
     def is_dolphin_root(self) -> Path:
         if self.root:
-            folders = {x.name.lower() for x in self.root.iterdir() if x.is_dir()}
+            folders = {x.name.lower()
+                       for x in self.root.iterdir() if x.is_dir()}
             return "sys" in folders and "files" in folders and "&&systemdata" not in folders
         else:
             return False
 
     def is_gcr_root(self) -> Path:
         if self.root:
-            folders = {x.name.lower() for x in self.root.iterdir() if x.is_dir()}
+            folders = {x.name.lower()
+                       for x in self.root.iterdir() if x.is_dir()}
             return "&&systemdata" in folders
         else:
             return False
@@ -271,7 +276,8 @@ class GamecubeISO(ISOBase):
         # --- FST --- #
 
         if preCalc:
-            self.pre_calc_metadata((self.MaxSize - self.get_auto_blob_size() + 1) & ~self._get_greatest_alignment())
+            self.pre_calc_metadata(
+                (self.MaxSize - self.get_auto_blob_size() + 1) & ~self._get_greatest_alignment())
 
         self._rawFST.seek(0)
         self._rawFST.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
@@ -279,14 +285,15 @@ class GamecubeISO(ISOBase):
 
         _curEntry = 1
         _strOfs = 0
-        _strTableOfs = len(self) * 0xC  # Get the offset to the string table 
+        _strTableOfs = len(self) * 0xC  # Get the offset to the string table
         for child in self.rchildren(includedOnly=True):
             child._id = _curEntry
             self._rawFST.write(b"\x01" if child.is_dir() else b"\x00")
             self._rawFST.write(_strOfs.to_bytes(3, "big", signed=False))
-            write_uint32(self._rawFST, child.parent._id if child.is_dir() else child._fileoffset)
+            write_uint32(
+                self._rawFST, child.parent._id if child.is_dir() else child._fileoffset)
             write_uint32(self._rawFST, len(child) +
-                        _curEntry if child.is_dir() else child.size)
+                         _curEntry if child.is_dir() else child.size)
             _curEntry += 1
 
             _oldpos = self._rawFST.tell()
@@ -322,7 +329,7 @@ class GamecubeISO(ISOBase):
             with Path(self.systemPath, "AppLoader.ldr").open("wb") as f:
                 self.apploader.save(f)
 
-            with Path(self.systemPath, "Game.toc").open("wb") as f: 
+            with Path(self.systemPath, "Game.toc").open("wb") as f:
                 f.write(self._rawFST.getvalue())
         else:
             raise InvalidFSTError(f"{self.root} is not a valid root folder")
@@ -352,7 +359,7 @@ class GamecubeISO(ISOBase):
 
             f.write(self._rawFST.getvalue())
             self.progress.jobProgress += len(self._rawFST.getbuffer())
-            
+
             for child in self.rfiles(includedOnly=True):
                 f.write(b"\x00" * (child._fileoffset - f.tell()))
                 f.seek(child._fileoffset)
@@ -363,7 +370,7 @@ class GamecubeISO(ISOBase):
             f.write(b"\x00" * (self.MaxSize - f.tell()))
 
         # ----------- #
-        
+
         self.progress.jobProgress = self.MaxSize
 
     def extract(self, dest: Union[Path, str] = None, dumpPositions: bool = True):
@@ -460,7 +467,8 @@ class GamecubeISO(ISOBase):
         self.progress.set_ready(False)
         self.progress.jobProgress = 0
 
-        jobSize = 0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize)
+        jobSize = 0x2440 + (self.apploader.loaderSize +
+                            self.apploader.trailerSize)
         jobSize += self.dol.size
         jobSize += self.num_children()
 
@@ -522,12 +530,13 @@ class GamecubeISO(ISOBase):
         self.progress.set_ready(False)
         self.progress.jobProgress = 0
 
-        jobSize = 0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize)
+        jobSize = 0x2440 + (self.apploader.loaderSize +
+                            self.apploader.trailerSize)
         jobSize += self.dol.size
 
         self.progress.jobSize = jobSize
         self.progress.set_ready(True)
-        
+
         with self.isoPath.open("r+b") as f:
             self.bootheader.save(f)
             self.progress.jobProgress += 0x440
@@ -562,6 +571,7 @@ class GamecubeISO(ISOBase):
         self.isoPath = iso
         self.root = Path(iso.parent, "root").resolve()
 
+        # Initialize System files
         with iso.open("rb") as _rawISO:
             self.bootheader = Boot(_rawISO)
             self.bootinfo = BI2(_rawISO)
@@ -570,7 +580,8 @@ class GamecubeISO(ISOBase):
             _rawISO.seek(self.bootheader.fstOffset)
             self._rawFST = BytesIO(_rawISO.read(self.bootheader.fstSize))
 
-        self.load_file_systemv(self._rawFST)
+        # Initialize FST information
+        self.from_virtual(self._rawFST)
 
         if self.bootinfo.countryCode == BI2.Country.JAPAN:
             region = BNR.Regions.JAPAN
@@ -586,11 +597,13 @@ class GamecubeISO(ISOBase):
         if bnrNode:
             with iso.open("rb") as _rawISO:
                 _rawISO.seek(bnrNode._fileoffset)
-                self.bnr = BNR.from_data(_rawISO, region=region, size=bnrNode.size)
+                self.bnr = BNR.from_data(
+                    _rawISO, region=region, size=bnrNode.size)
         else:
             self.bnr = None
 
-        prev = FSTNode.file("", None, self.bootheader.fstSize, self.bootheader.fstOffset)
+        prev = FSTNode.file("", None, self.bootheader.fstSize,
+                            self.bootheader.fstOffset)
         for node in self.nodes_by_offset():
             alignment = self._detect_alignment(node, prev)
             if alignment != 4:
@@ -678,7 +691,8 @@ class GamecubeISO(ISOBase):
         self.progress.set_ready(True)
 
         with self.isoPath.open("rb") as _rawISO:
-            self._recursive_extract(node, dest / node.name, _rawISO, dumpPositions)
+            self._recursive_extract(
+                node, dest / node.name, _rawISO, dumpPositions)
 
         self.progress.jobProgress = self.progress.jobSize
 
@@ -712,7 +726,8 @@ class GamecubeISO(ISOBase):
         _minOffset = self.MaxSize - 4
         for child in self.rchildren():
             if child.is_file() and child._position:
-                child._fileoffset = align_int(child._position, child._alignment)
+                child._fileoffset = align_int(
+                    child._position, child._alignment)
                 if child._fileoffset < _minOffset:
                     _minOffset = child._fileoffset
 
@@ -783,7 +798,7 @@ class GamecubeISO(ISOBase):
 
         self._init_tables(data)
 
-        if "name" in data: #convert legacy to new
+        if "name" in data:  # convert legacy to new
             self.bootheader.gameName = data["name"]
             self.bootheader.gameCode = data["gameid"][:4]
             self.bootheader.makerCode = data["gameid"][4:6]
@@ -806,7 +821,7 @@ class GamecubeISO(ISOBase):
                       "devtitle": self.bnr.developerTitle if self.bnr else "",
                       "description": self.bnr.gameDescription if self.bnr else "",
                       "alignment": self._alignmentTable,
-                      "location": {k : self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
+                      "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
                       "exclude": [x for x in self._excludeTable]}
             with path.open("w") as f:
                 json.dump(config, f, indent=4)
@@ -835,7 +850,7 @@ class GamecubeISO(ISOBase):
                   "devtitle": self.bnr.developerTitle if self.bnr else "",
                   "description": self.bnr.gameDescription if self.bnr else "",
                   "alignment": self._alignmentTable,
-                  "location": {k : self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
+                  "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
                   "exclude": [x for x in self._excludeTable]}
 
         with self.configPath.open("w") as f:
@@ -852,7 +867,8 @@ class GamecubeISO(ISOBase):
                     disable = True
 
             if entry.is_file():
-                child = FSTNode.file(entry.name, parent=parentnode, size=entry.stat().st_size)
+                child = FSTNode.file(
+                    entry.name, parent=parentnode, size=entry.stat().st_size)
                 child._alignment = self._get_alignment(child)
                 child._position = self._get_location(child)
                 child._exclude = disable

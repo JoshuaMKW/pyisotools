@@ -11,9 +11,10 @@ import threading
 import time
 import traceback
 import webbrowser
+from enum import Enum, IntEnum
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Callable, Dict, Iterable, Tuple, Union
 
 from PIL import Image, ImageQt
 from PySide2.QtCore import QEvent, Qt
@@ -82,7 +83,7 @@ class ThreadManager(object):
             ThreadManager._THREAD_COLLECTION.pop(t.getName())
 
     @staticmethod
-    def threads() -> Union[FlagThread, threading.Thread]:
+    def threads() -> Iterable[Union[FlagThread, threading.Thread]]:
         for thread in ThreadManager._THREAD_COLLECTION.values():
             yield thread
 
@@ -90,7 +91,7 @@ class ThreadManager(object):
 def excepthook(args: Tuple[BaseException, TracebackType, int, Union[threading.Thread, FlagThread]]):
     ProgramState.set_error(
         "".join(traceback.format_exception(args[0], args[1], args[2])))
-    args[3]._zombie = True
+    args[3].quit()
 
 
 threading.excepthook = excepthook
@@ -98,11 +99,15 @@ threading.excepthook = excepthook
 
 def notify_status(notification: Union[str, QDialog], context: JobDialogState):
     """ Wrapped function must return a (Controller, bool, str) tuple to indicate a status, and show message """
-    def decorater_inner(func):
+    def decorater_inner(func: Callable):
         @functools.wraps(func)
         def wrapper(*args: Controller, **kwargs):
+            nonlocal notification
             try:
-                successful = func(*args, **kwargs)
+                if notification is not None:
+                    successful = func(*args, **kwargs)
+                else:
+                    successful, notification = func(*args, **kwargs)
             except Exception:
                 dialog = JobFailedDialog(
                     args[0], info="".join(traceback.format_exc()))
@@ -178,16 +183,7 @@ def guard(func):
     return wrapper
 
 
-class StoppableThread(threading.Thread):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._zombie = False
-
-    def is_zombie(self) -> bool:
-        return self._zombie
-
-
-class JobDialogState:
+class JobDialogState(IntEnum):
     SHOW_NONE = 0
     SHOW_COMPLETE = 1
     SHOW_FAILURE = 2
@@ -246,9 +242,28 @@ class NodeFieldDialog(QDialog):
 
 
 class Controller(QMainWindow):
-    class Themes:
-        DARK = resource_path(Path("themes", "dark.qss"))
-        LIGHT = resource_path(Path("themes", "light.qss"))
+    class Themes(Enum):
+        LIGHT = 0
+        DARK = 0
+
+    @staticmethod
+    def get_config_path():
+        versionStub = __version__.replace(".", "-")
+        return get_program_folder(f"pyisotools v{versionStub}") / "program.cfg"
+
+    @staticmethod
+    def get_window_title():
+        return f"{self.get_window_title()}"
+
+    @staticmethod
+    def open_path_in_explorer(path: Path):
+        if sys.platform == "win32":
+            subprocess.Popen(
+                f"explorer /select,\"{path.resolve()}\"", shell=True)
+        elif sys.platform == "linux":
+            subprocess.Popen(["xdg-open", path.resolve()])
+        elif sys.platform == "darwin":
+            subprocess.Popen(['open', '--', path.resolve()])
 
     def __init__(self, ui: Ui_MainWindow, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -272,24 +287,16 @@ class Controller(QMainWindow):
         self.updater.start()
         ThreadManager.register(self.updater)
 
-    @property
-    def programConfig(self):
-        versionStub = __version__.replace(".", "-")
-        return get_program_folder(f"pyisotools v{versionStub}") / "program.cfg"
-
     def closeEvent(self, event):
         self.update_program_config()
         self.updater.exit(0)
         for thread in ThreadManager.threads():
-            if isinstance(thread, FlagThread):
-                thread.quit()
-                thread.wait()
-            elif isinstance(thread, StoppableThread):
-                thread._zombie = True
+            thread.quit()
+            thread.wait()
         event.accept()
 
     def notify_update(self, releaseInfo: ReleaseData):
-        self.updater.skipCount = 3600
+        self.updater.waitCycles = 3600
 
         dialog = QDialog(self, Qt.WindowSystemMenuHint |
                          Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
@@ -307,7 +314,11 @@ class Controller(QMainWindow):
     def is_from_iso(self) -> bool:
         return self._fromIso
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
+    # ----------------------------- #
+    # -- // CONNECTED SIGNALS // -- #
+    # ----------------------------- #
+
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_load_iso_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Open Gamecube ISO",
@@ -318,7 +329,7 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.ExistingFile)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False, ""
 
         selected = Path(dialog.selectedFiles()[0]).resolve()
 
@@ -329,21 +340,22 @@ class Controller(QMainWindow):
 
         if self.rootPath.is_file():
             self.iso = GamecubeISO.from_iso(self.rootPath)
-            self._fromIso = True
             self.ui.actionClose.setEnabled(True)
             self.ui.actionSave.setEnabled(True)
             self.ui.actionRebuild.setEnabled(False)
             self.ui.actionExtract.setEnabled(True)
             self.update_all()
+
+            self._fromIso = True
         else:
             return False, "The file does not exist!"
 
         self.setWindowTitle(
-            f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (iso)")
+            f"{self.get_window_title} - {self.iso.bootheader.gameName} (iso)")
 
-        return True, None
+        return True, ""
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_load_root_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Open Gamecube Root",
@@ -354,7 +366,7 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.DirectoryOnly)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False, ""
 
         selected = Path(dialog.selectedFiles()[0]).resolve()
 
@@ -379,16 +391,16 @@ class Controller(QMainWindow):
 
         if self.iso.is_dolphin_root():
             self.setWindowTitle(
-                f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (root)")
+                f"{self.get_window_title()} - {self.iso.bootheader.gameName} (root)")
         elif self.iso.is_gcr_root():
             self.setWindowTitle(
-                f"pyisotools v{__version__} - {self.iso.bootheader.gameName} (GCR root)")
+                f"{self.get_window_title()} - {self.iso.bootheader.gameName} (GCR root)")
         else:
             return False, f"{self.rootPath} is not a valid root folder!"
 
-        return True, None
+        return True, ""
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_build_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Build Root To...",
@@ -400,14 +412,14 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.AnyFile)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False
 
         self.buildPath = Path(dialog.selectedFiles()[0]).resolve()
 
         self.save_all(False)
 
-        isoProcess = StoppableThread(target=self.iso.build, args=(
-            self.buildPath, False), daemon=True)
+        isoProcess = FlagThread(target=self.iso.build, args=(
+            self.buildPath, False), parent=self)
         progressBarProcess = ProgressHandler(self, isoProcess, self)
 
         isoProcess.start()
@@ -418,9 +430,9 @@ class Controller(QMainWindow):
         if isoProcess.is_alive():
             progressBarProcess.run()
 
-        return True, None
+        return True
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_extract_dialog(self, dumpPositions: bool = False) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Extract ISO To...",
@@ -429,14 +441,14 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.DirectoryOnly)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False
 
         self.extractPath = Path(dialog.selectedFiles()[0]).resolve()
 
         self.save_all(False)
 
-        isoProcess = StoppableThread(target=self.iso.extract, args=(
-            self.extractPath, dumpPositions), daemon=True)
+        isoProcess = FlagThread(target=self.iso.extract, args=(
+            self.extractPath, dumpPositions), parent=self)
         progressBarProcess = ProgressHandler(self, isoProcess, self)
 
         isoProcess.start()
@@ -447,9 +459,9 @@ class Controller(QMainWindow):
         if isoProcess.is_alive():
             progressBarProcess.run()
 
-        return True, None
+        return True
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_extract_system_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Extract System Data To...",
@@ -458,12 +470,12 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.DirectoryOnly)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False
 
         self.genericPath = Path(dialog.selectedFiles()[0]).resolve()
 
-        isoProcess = StoppableThread(
-            target=self.iso.extract_system_data, args=(self.genericPath,), daemon=True)
+        isoProcess = FlagThread(
+            target=self.iso.extract_system_data, args=(self.genericPath,), parent=self)
         progressBarProcess = ProgressHandler(self, isoProcess, self)
 
         isoProcess.start()
@@ -474,7 +486,7 @@ class Controller(QMainWindow):
         if isoProcess.is_alive():
             progressBarProcess.run()
 
-        return True, None
+        return True
 
     @notify_status("The file does not exist!", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def bnr_load_dialog(self) -> bool:
@@ -503,7 +515,7 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.ExistingFile)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False, ""
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
@@ -524,11 +536,11 @@ class Controller(QMainWindow):
                 ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
                 self.ui.bannerImageView.setPixmap(pixmap)
 
-            return True, None
+            return True, ""
         else:
             return False, "The file does not exist!"
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def bnr_save_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Save Image To...",
@@ -540,14 +552,14 @@ class Controller(QMainWindow):
         dialog.setAcceptMode(QFileDialog.AcceptSave)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
         image = self.bnrMap.getImage()
         image.save(self.bnrImagePath)
 
-        return True, None
+        return True
 
     def bnr_reset_info(self):
         self.ui.bannerGroupBox.setEnabled(False)
@@ -563,12 +575,12 @@ class Controller(QMainWindow):
         self.ui.bannerImageView.setFrameShape(QFrame.Shape.Box)
 
         if self._fromIso:
-            with self.iso.isoPath.open("rb") as _rawISO:
+            with self.iso.isoPath.open("rb") as f:
                 for node in self.iso.rchildren():
                     if node.is_file() and fnmatch(node.name, "*.bnr"):
-                        _rawISO.seek(node._fileoffset)
+                        f.seek(node._fileoffset)
                         self.bnrMap[node.path] = BNR.from_data(
-                            _rawISO, size=node.size)
+                            f, size=node.size)
 
         self.ui.bannerComboBox.clear()
         self.ui.bannerComboBox.addItems(sorted(
@@ -702,18 +714,18 @@ class Controller(QMainWindow):
         _data["darktheme"] = self.ui.actionDarkTheme.isChecked()
         _data["updates"] = self.ui.actionCheckUpdates.isChecked()
 
-        self.programConfig.parent.mkdir(parents=True, exist_ok=True)
-        with self.programConfig.open("wb") as config:
+        self.get_config_path().parent.mkdir(parents=True, exist_ok=True)
+        with self.get_config_path().open("wb") as config:
             pickle.dump(_data, config)
 
     def load_program_config(self):
-        if not self.programConfig.exists():
+        if not self.get_config_path().exists():
             self.theme = Controller.Themes.LIGHT
             self.ui.actionDarkTheme.setChecked(False)
             self.ui.actionCheckUpdates.setChecked(True)
             return
 
-        with self.programConfig.open("rb") as config:
+        with self.get_config_path().open("rb") as config:
             _data = pickle.load(config)
 
         self.ui.actionDarkTheme.setChecked(_data["darktheme"])
@@ -724,16 +736,50 @@ class Controller(QMainWindow):
         else:
             self.theme = Controller.Themes.LIGHT
 
-        self._manage_settings_text()
-
-    def update_theme(self, checked: bool):
-        if checked:
-            self.theme = Controller.Themes.DARK
-        else:
+    def update_theme(self, theme: Controller.Themes):
+        import qdarkstyle
+        if theme == Controller.Themes.LIGHT:
             self.theme = Controller.Themes.LIGHT
+            self.setStyleSheet("")
+            self.ui.bannerImageView.setStyleSheet("")
+            self.ui.bannerHFrameLine.setStyleSheet("")
+        else:
+            self.theme = Controller.Themes.DARK
+            self.setStyleSheet(qdarkstyle.load_stylesheet())
+            self.ui.bannerImageView.setStyleSheet("QLabel {\n"
+                                                  "  background-color: #19232D\n;"
+                                                  "  border: 1px solid #32414B\n;"
+                                                  "  padding: 2px\n;"
+                                                  "  margin: 0px\n;"
+                                                  "  color: #F0F0F0\n;"
+                                                  "}\n\n"
 
-        self._manage_settings_text()
-        self._load_theme()
+                                                  "QLabel:disabled {\n"
+                                                  "  background-color: #19232D;\n"
+                                                  "  border: 1px solid #32414B;\n"
+                                                  "  color: #787878;\n"
+                                                  "}")
+            self.ui.bannerHFrameLine.setStyleSheet(".QFrame {\n"
+                                                   "  border-radius: 4px;\n"
+                                                   "  border: 1px solid #32414B;\n"
+                                                   "}\n\n"
+
+                                                   ".QFrame[frameShape=\"0\"] {\n"
+                                                   "  border-radius: 4px;\n"
+                                                   "  border: 1px transparent #32414B;\n"
+                                                   "}\n\n"
+
+                                                   ".QFrame[frameShape=\"4\"] {\n"
+                                                   "  max-height: 2px;\n"
+                                                   "  border: none;\n"
+                                                   "  background-color: #32414B;\n"
+                                                   "}\n\n"
+
+                                                   ".QFrame[frameShape=\"5\"] {\n"
+                                                   "  max-width: 2px;\n"
+                                                   "  border: none;\n"
+                                                   "  background-color: #32414B;\n"
+                                                   "}")
 
     def update_all(self):
         _recursive_enable(self.ui)
@@ -767,7 +813,7 @@ class Controller(QMainWindow):
         self.ui.isoDiskIDTextBox.setPlainText(
             f"0x{self.iso.bootheader.diskID:02X}")
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
     def save_all(self, showjob: bool = True):
         _boot = self.iso.bootheader
         _appldr = self.iso.apploader
@@ -808,14 +854,14 @@ class Controller(QMainWindow):
                 self.iso.save_system_datav()
             else:
                 self.iso.save_system_data()
-            return True, None
+            return True, ""
         else:
             if self.is_from_iso():
-                isoProcess = StoppableThread(
-                    target=self.iso.save_system_datav, daemon=True)
+                isoProcess = FlagThread(
+                    target=self.iso.save_system_datav, parent=self)
             else:
-                isoProcess = StoppableThread(
-                    target=self.iso.save_system_data, daemon=True)
+                isoProcess = FlagThread(
+                    target=self.iso.save_system_data, parent=self)
 
             progressBarProcess = ProgressHandler(self, isoProcess, self)
 
@@ -837,8 +883,8 @@ class Controller(QMainWindow):
 
     def reset_all(self):
         self.ui.setupUi(self)
-        self._load_theme()
-        self.setWindowTitle(f"pyisotools v{__version__}")
+        self.update_theme(Controller.Themes.LIGHT)
+        self.setWindowTitle(f"{self.get_window_title()}")
 
     def load_file_system(self):
         rootNode = FSTTreeItem()
@@ -877,7 +923,7 @@ class Controller(QMainWindow):
             viewAction = QAction("Open Path in Explorer",
                                  self.ui.fileSystemTreeWidget)
             viewAction.triggered.connect(
-                lambda clicked=None, x=path: self._open_path_in_explorer(x))
+                lambda clicked=None, x=path: self.open_path_in_explorer(x))
             alignmentAction = QAction(
                 "Set Alignment...", self.ui.fileSystemTreeWidget)
             alignmentAction.triggered.connect(
@@ -945,7 +991,7 @@ class Controller(QMainWindow):
             self.ui.fileSystemSizeInfoTextBox.setPlainText(
                 f"0x{item.node.size:X}")
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, callback=None, args=()) -> Tuple[bool, str]:
         if filter is None:
             filter = "Any folder"
@@ -960,13 +1006,13 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.DirectoryOnly)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False
 
         self.genericPath = Path(dialog.selectedFiles()[0])
 
         if callback:
-            isoProcess = StoppableThread(target=callback, args=(
-                self, self.genericPath, *args), daemon=True)
+            isoProcess = FlagThread(target=callback, args=(
+                self, self.genericPath, *args), parent=self)
             progressBarProcess = ProgressHandler(self, isoProcess, self)
 
             isoProcess.start()
@@ -977,11 +1023,11 @@ class Controller(QMainWindow):
             if isoProcess.is_alive():
                 progressBarProcess.run()
 
-            return True, None
+            return True
         else:
-            return True, None
+            return True
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
     def _open_alignment_dialog(self, item: FSTTreeItem):
         window = Ui_NodeFieldWindow()
         dialog = QDialog(self, Qt.WindowSystemMenuHint |
@@ -1000,7 +1046,7 @@ class Controller(QMainWindow):
 
         dialog.show()
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False, ""
 
         text = window.plainTextEdit.toPlainText()
 
@@ -1028,9 +1074,9 @@ class Controller(QMainWindow):
             self.iso.pre_calc_metadata(
                 self.iso.MaxSize - self.iso.get_auto_blob_size())
 
-        return True, None
+        return True, ""
 
-    @notify_status(JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
     def _open_position_dialog(self, item: FSTTreeItem):
         window = Ui_NodeFieldWindow()
         dialog = QDialog(self, Qt.WindowSystemMenuHint |
@@ -1049,7 +1095,7 @@ class Controller(QMainWindow):
 
         dialog.show()
         if dialog.exec_() != QFileDialog.Accepted:
-            return False, None
+            return False, ""
 
         text = window.plainTextEdit.toPlainText()
 
@@ -1071,7 +1117,7 @@ class Controller(QMainWindow):
                     self.iso.MaxSize - self.iso.get_auto_blob_size())
                 self.ui.fileSystemStartInfoTextBox.setPlainText(
                     f"0x{item.node._fileoffset:X}")
-            return True, None
+            return True, ""
         else:
             newPos = min(position, self.iso.MaxSize - 4) & -4
             if item.node._position != newPos:
@@ -1081,7 +1127,7 @@ class Controller(QMainWindow):
 
             self.ui.fileSystemStartInfoTextBox.setPlainText(
                 f"0x{item.node._position:X}")
-            return True, None
+            return True, ""
 
     def _disable_node(self, item: FSTTreeItem):
         node = item.node
@@ -1101,30 +1147,20 @@ class Controller(QMainWindow):
                     self.iso.bnr = BNR(self.iso.dataPath /
                                        item.node.path, region=region)
 
-                self.bnrreset_info()
-                self.bnrupdate_info()
+                self.bnr_reset_info()
+                self.bnr_update_info()
         else:
             item.node._exclude = True
             if isRootFile and isAnyBNR:
                 if node.name == "opening.bnr":
                     self.iso.bnr = None
-                self.bnrreset_info()
+                self.bnr_reset_info()
 
         item.setDisabled(item.node._exclude)
         self.iso.pre_calc_metadata(
             self.iso.MaxSize - self.iso.get_auto_blob_size())
         self.ui.fileSystemStartInfoTextBox.setPlainText(
             f"0x{item.node._fileoffset:X}")
-
-    @staticmethod
-    def _open_path_in_explorer(path: Path):
-        if sys.platform == "win32":
-            subprocess.Popen(
-                f"explorer /select,\"{path.resolve()}\"", shell=True)
-        elif sys.platform == "linux":
-            subprocess.Popen(["xdg-open", path.resolve()])
-        elif sys.platform == "darwin":
-            subprocess.Popen(['open', '--', path.resolve()])
 
     def _load_fst_tree(self, parent: FSTTreeItem, node: FSTNode):
         for child in node.children:
@@ -1140,59 +1176,6 @@ class Controller(QMainWindow):
                 treeNode.setIcon(0, QIcon(u":/icons/File"))
 
             parent.addChild(treeNode)
-
-    def _manage_settings_text(self, checked: bool = False):
-        if self.ui.actionDarkTheme.isChecked():
-            self.ui.actionDarkTheme.setText("✔ Dark Theme")
-        else:
-            self.ui.actionDarkTheme.setText("Dark Theme")
-
-        if self.ui.actionCheckUpdates.isChecked() is True and self.ui.actionDarkTheme.isChecked() is True:
-            self.ui.actionCheckUpdates.setText("✔ Check Updates")
-        else:
-            self.ui.actionCheckUpdates.setText("Check Updates")
-
-    def _load_theme(self):
-        self.setStyleSheet(self.theme.read_text())
-
-        if self.theme == Controller.Themes.LIGHT:
-            self.ui.bannerImageView.setStyleSheet("")
-            self.ui.bannerHFrameLine.setStyleSheet("")
-        else:
-            self.ui.bannerImageView.setStyleSheet("QLabel {\n"
-                                                  "  background-color: #19232D\n;"
-                                                  "  border: 1px solid #32414B\n;"
-                                                  "  padding: 2px\n;"
-                                                  "  margin: 0px\n;"
-                                                  "  color: #F0F0F0\n;"
-                                                  "}\n\n"
-
-                                                  "QLabel:disabled {\n"
-                                                  "  background-color: #19232D;\n"
-                                                  "  border: 1px solid #32414B;\n"
-                                                  "  color: #787878;\n"
-                                                  "}")
-            self.ui.bannerHFrameLine.setStyleSheet(".QFrame {\n"
-                                                   "  border-radius: 4px;\n"
-                                                   "  border: 1px solid #32414B;\n"
-                                                   "}\n\n"
-
-                                                   ".QFrame[frameShape=\"0\"] {\n"
-                                                   "  border-radius: 4px;\n"
-                                                   "  border: 1px transparent #32414B;\n"
-                                                   "}\n\n"
-
-                                                   ".QFrame[frameShape=\"4\"] {\n"
-                                                   "  max-height: 2px;\n"
-                                                   "  border: none;\n"
-                                                   "  background-color: #32414B;\n"
-                                                   "}\n\n"
-
-                                                   ".QFrame[frameShape=\"5\"] {\n"
-                                                   "  max-width: 2px;\n"
-                                                   "  border: none;\n"
-                                                   "  background-color: #32414B;\n"
-                                                   "}")
 
 
 class ProgressHandler(FlagThread):
