@@ -11,9 +11,17 @@ class FlagThread(QThread):
     def isQuitting(self):
         return self._isQuit
 
+    def exit(self, retcode: int = 0):
+        self._isQuit = True
+        super().exit(retcode)
+
     def quit(self):
         self._isQuit = True
         super().quit()
+
+    def terminate(self):
+        self._isQuit = True
+        super().terminate()
 
     def start(self, priority: QThread.Priority = QThread.Priority.NormalPriority):
         self._isQuit = False

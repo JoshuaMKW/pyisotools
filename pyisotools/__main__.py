@@ -1,10 +1,9 @@
 import sys
 
-from argparse import ArgumentParser
 from pathlib import Path
 
 from PySide2.QtCore import QCoreApplication
-from PySide2.QtWidgets import QApplication, QMainWindow
+from PySide2.QtWidgets import QApplication
 
 from pyisotools import __version__
 from pyisotools.gui.mainwindow import Ui_MainWindow
@@ -23,6 +22,8 @@ def main(argv: list = sys.argv[1:]):
         mainWindow.show()
         sys.exit(app.exec_())
     else:
+        from argparse import ArgumentParser
+        
         parser = ArgumentParser(f"pyisotools v{__version__}", description="ISO tool for extracting/building Gamecube ISOs", allow_abbrev=False)
 
         parser.add_argument("src", help="ISO/root to build/extract with")

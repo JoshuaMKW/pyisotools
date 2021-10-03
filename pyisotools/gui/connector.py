@@ -10,7 +10,6 @@ import sys
 import threading
 import time
 import traceback
-import webbrowser
 from enum import Enum, IntEnum
 from fnmatch import fnmatch
 from pathlib import Path
@@ -19,7 +18,7 @@ from typing import Callable, Dict, Iterable, Tuple, Union
 from PIL import Image, ImageQt
 from PySide2.QtCore import QEvent, Qt
 from PySide2.QtGui import QIcon
-from PySide2.QtWidgets import (QAction, QDial, QDialog, QFileDialog,
+from PySide2.QtWidgets import (QAction, QDialog, QFileDialog,
                                QFrame, QMainWindow, QMenu,
                                QMessageBox)
 
@@ -30,7 +29,7 @@ from ..iso import FSTNode, GamecubeISO, WiiISO
 from .customwidgets import FSTTreeItem
 from .flagthread import FlagThread
 from .nodewindow import Ui_NodeFieldWindow
-from .updater import GitReleaseUpdateScraper, ReleaseData
+from .updater import GitUpdateScraper, ReleaseManager
 from .updatewindow import Ui_UpdateDialog
 from .workpathing import get_program_folder, resource_path
 
@@ -253,7 +252,7 @@ class Controller(QMainWindow):
 
     @staticmethod
     def get_window_title():
-        return f"{self.get_window_title()}"
+        return f"pyisotools v{__version__}"
 
     @staticmethod
     def open_path_in_explorer(path: Path):
@@ -282,8 +281,9 @@ class Controller(QMainWindow):
         self._fromIso = False
         self._viewPath: Path = None
 
-        self.updater = GitReleaseUpdateScraper("JoshuaMKW", "pyisotools")
+        self.updater = GitUpdateScraper("JoshuaMKW", "pyisotools")
         self.updater.updateFound.connect(self.notify_update)
+        self.updater.set_wait_time(60.0 * 60.0 * 2) # Every 2 hours
         self.updater.start()
         ThreadManager.register(self.updater)
 
@@ -295,8 +295,8 @@ class Controller(QMainWindow):
             thread.wait()
         event.accept()
 
-    def notify_update(self, releaseInfo: ReleaseData):
-        self.updater.waitCycles = 3600
+    def notify_update(self):
+        newestRelease = self.updater.get_newest_release()
 
         dialog = QDialog(self, Qt.WindowSystemMenuHint |
                          Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
@@ -305,11 +305,11 @@ class Controller(QMainWindow):
         dialog.setModal(True)
 
         updateWindow.updateLabel.setText(
-            f"pyisotools {releaseInfo.version} available!")
-        updateWindow.changelogTextEdit.setHtml(str(releaseInfo.info))
+            f"pyisotools {newestRelease.tag_name} available!")
+        updateWindow.changelogTextEdit.setMarkdown(self.updater.compile_changelog_from(__version__))
 
         if dialog.exec_() == QDialog.Accepted:
-            webbrowser.open_new_tab(releaseInfo.parentURL)
+            self.updater.view(newestRelease)
 
     def is_from_iso(self) -> bool:
         return self._fromIso
@@ -1203,7 +1203,7 @@ class ProgressHandler(FlagThread):
         self.controller.ui.operationProgressBar.setValue(
             self.controller.iso.progress.jobProgress)
 
-    def exit(self, retcode: int = ...):
+    def exit(self, retcode: int = 0):
         super().exit(retcode)
         ThreadManager.deregister(self)
 
