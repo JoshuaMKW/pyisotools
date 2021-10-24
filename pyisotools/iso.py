@@ -1,11 +1,14 @@
 from __future__ import annotations
+from enum import IntEnum
 
 import json
+import math
+
 from fnmatch import fnmatch
 from queue import Queue
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Union
+from typing import BinaryIO, Optional, Type, Union
 
 from dolreader.dol import DolFile
 from sortedcontainers import SortedDict, SortedList
@@ -13,8 +16,8 @@ from sortedcontainers import SortedDict, SortedList
 from pyisotools.apploader import Apploader
 from pyisotools.bi2 import BI2
 from pyisotools.bnrparser import BNR
-from pyisotools.boot import Boot
-from pyisotools.fst import FSTNode, FileSystemTable, FSTInvalidNodeError, FSTInvalidError
+from pyisotools.boot import BootHeader
+from pyisotools.fst import FSTNode, FileSystemTable, FSTInvalidNodeError, FSTInvalidError, _Progress
 from pyisotools.iohelper import (align_int, read_string, read_ubyte,
                                  read_uint32, write_uint32)
 
@@ -27,75 +30,38 @@ class FileSystemInvalidError(Exception):
     ...
 
 
-class _Progress(object):
-    def __init__(self):
-        self.jobProgress = 0
-        self.jobSize = 0
-        self._isReady = False
-
-    def set_ready(self, ready: bool):
-        self._isReady = ready
-
-    def is_ready(self) -> bool:
-        return self._isReady
+class InvalidPartitionError(Exception):
+    ...
 
 
-class ISOBase(FileSystemTable):
+class Partition(FileSystemTable):
+    __CurEntry = 0
+    __StrOfs = 0
+    __DataOfs = 0
+    __Prevfile = None
 
-    _CurEntry = 0
-    _StrOfs = 0
-    _DataOfs = 0
-    _Prevfile = None
+    class Type(IntEnum):
+        GCN = 0
+        WII = 1
+        UNKNOWN = -1
 
     def __init__(self):
         super().__init__()
-        self.root: Path = None
 
-        self.progress = _Progress()
-
-        self.isoPath = None
-        self.bootheader = None
-        self.bootinfo = None
-        self.apploader = None
-        self.dol = None
+        self.bootheader: BootHeader = None
+        self.bootinfo: BI2 = None
+        self.apploader: Apploader = None
+        self.dol: DolFile = None
         self._rawFST = None
 
         self._alignmentTable = SortedDict()
         self._locationTable = SortedDict()
         self._excludeTable = SortedList()
 
-    def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> FSTNode:
-        _type = read_ubyte(fst)
-        _nameOfs = int.from_bytes(fst.read(3), "big", signed=False)
-        _entryOfs = read_uint32(fst)
-        _size = read_uint32(fst)
-
-        _oldpos = fst.tell()
-        node.name = read_string(
-            fst, strTabOfs + _nameOfs, encoding="shift-jis")
-        fst.seek(_oldpos)
-
-        node._id = self._curEntry
-
-        self._curEntry += 1
-
-        if _type == FSTNode.FOLDER:
-            node.type = FSTNode.FOLDER
-            node._dirparent = _entryOfs
-            node._dirnext = _size
-
-            while self._curEntry < _size:
-                child = self._read_nodes(fst, FSTNode.empty(), strTabOfs)
-                node.add_child(child)
-        else:
-            node.type = FSTNode.FILE
-            node.size = _size
-            node._fileoffset = _entryOfs
-
-        return node
+        self._type = Partition.Type.UNKNOWN
 
     def _init_tables(self, config: Optional[Path] = None):
-        if not config:
+        if not config or not config.is_file():
             self._alignmentTable = SortedDict()
             self._locationTable = SortedDict()
             self._excludeTable = SortedList()
@@ -110,18 +76,82 @@ class ISOBase(FileSystemTable):
             self._locationTable = SortedDict(data["location"])
             self._excludeTable = SortedList(data["exclude"])
 
-    def _recursive_extract(self, node: FSTNode, dest: Path, iso, dumpPositions: bool = False):
+    @staticmethod
+    def is_wii(path: Path):
+        wiiNames = {
+            "disc",
+            "cert.bin",
+            "h3.bin",
+            "ticket.bin",
+            "tmd.bin"
+        }
+        names = [p.name for p in path.iterdir()]
+        return wiiNames.issubset(names)
+
+    @staticmethod
+    def is_gcn(path: Path):
+        wiiNames = {
+            "disc",
+            "cert.bin",
+            "h3.bin",
+            "ticket.bin",
+            "tmd.bin"
+        }
+        names = [p.name for p in path.iterdir()]
+        return not wiiNames.issubset(names)
+
+    def is_gcn_partition(self):
+        return self._type == Partition.Type.GCN
+
+    def is_wii_partition(self):
+        return self._type == Partition.Type.WII
+
+    @classmethod
+    def from_physical(cls, path: Union[str, Path]) -> FileSystemTable:
+        ...
+
+    @classmethod
+    def from_virtual(cls, path: Union[str, Path]) -> FileSystemTable:
+        ...
+
+    def realize(self, pathpartition: Union[str, Path]):
+        if isinstance(pathpartition, str):
+            pathfst = Path(pathpartition)
+
+        if not pathfst.parent.exists():
+            pathfst.parent.mkdir(parents=True, exist_ok=True)
+
+        # ------------ #
+        # -- System -- #
+        # ------------ #
+
+        with Path(pathpartition, "boot.bin").open("wb") as f:
+            self.bootheader.save(f)
+
+        with Path(pathpartition, "bi2.bin").open("wb") as f:
+            self.bootinfo.save(f)
+
+        with Path(pathpartition, "apploader.img").open("wb") as f:
+            self.apploader.save(f)
+
+        if (self.is_wii_partition()):
+            ...
+
+        super().realize(pathpartition / "sys" / "fst.bin", pathpartition / "files")
+
+
+    def _recursive_extract(self, node: FSTNode, dest: Path, iso: BinaryIO, dumpPositions: bool = False):
         if node.is_file():
-            iso.seek(node._fileoffset)
+            iso.seek(node.position)
             dest.write_bytes(iso.read(node.size))
-            self.progress.jobProgress += node.size
+            self.progress.set_progress(node.size)
         else:
             dest.mkdir(parents=True, exist_ok=True)
             for child in node.children:
                 self._recursive_extract(child, dest/child.name, iso)
 
         if dumpPositions:
-            self._locationTable[node.path] = node._fileoffset
+            self._locationTable[node.fullPath] = node.position
 
     def _collect_size(self, size: int) -> int:
         for node in self.children:
@@ -145,7 +175,7 @@ class ISOBase(FileSystemTable):
 
     def _get_alignment(self, node: Union[FSTNode, str]) -> int:
         if isinstance(node, FSTNode):
-            _path = node.path
+            _path = node.fullPath
         else:
             _path = node
 
@@ -157,7 +187,7 @@ class ISOBase(FileSystemTable):
 
     def _get_location(self, node: Union[FSTNode, str]) -> int:
         if isinstance(node, FSTNode):
-            _path = node.path
+            _path = node.fullPath
         else:
             _path = node
 
@@ -166,7 +196,7 @@ class ISOBase(FileSystemTable):
 
     def _get_excluded(self, node: Union[FSTNode, str]) -> bool:
         if isinstance(node, FSTNode):
-            _path = node.path
+            _path = node.fullPath
         else:
             _path = node
 
@@ -573,7 +603,7 @@ class GamecubeISO(ISOBase):
 
         # Initialize System files
         with iso.open("rb") as _rawISO:
-            self.bootheader = Boot(_rawISO)
+            self.bootheader = BootHeader(_rawISO)
             self.bootinfo = BI2(_rawISO)
             self.apploader = Apploader(_rawISO)
             self.dol = DolFile(_rawISO, startpos=self.bootheader.dolOffset)
@@ -618,7 +648,7 @@ class GamecubeISO(ISOBase):
                 self.dol = DolFile(f)
 
             with Path(self.systemPath, "boot.bin").open("rb") as f:
-                self.bootheader = Boot(f)
+                self.bootheader = BootHeader(f)
 
             with Path(self.systemPath, "bi2.bin").open("rb") as f:
                 self.bootinfo = BI2(f)
@@ -630,7 +660,7 @@ class GamecubeISO(ISOBase):
                 self.dol = DolFile(f)
 
             with Path(self.systemPath, "ISO.hdr").open("rb") as f:
-                self.bootheader = Boot(f)
+                self.bootheader = BootHeader(f)
                 self.bootinfo = BI2(f)
 
             with Path(self.systemPath, "Apploader.ldr").open("rb") as f:

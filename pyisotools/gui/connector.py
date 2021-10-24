@@ -308,8 +308,12 @@ class Controller(QMainWindow):
             f"pyisotools {newestRelease.tag_name} available!")
         updateWindow.changelogTextEdit.setMarkdown(self.updater.compile_changelog_from(__version__))
 
+        self.updater.blockSignals(True)
+
         if dialog.exec_() == QDialog.Accepted:
             self.updater.view(newestRelease)
+
+        self.updater.blockSignals(False)
 
     def is_from_iso(self) -> bool:
         return self._fromIso
@@ -1145,7 +1149,7 @@ class Controller(QMainWindow):
 
                 if node.name == "opening.bnr":
                     self.iso.bnr = BNR(self.iso.dataPath /
-                                       item.node.path, region=region)
+                                       item.node.fullPath, region=region)
 
                 self.bnr_reset_info()
                 self.bnr_update_info()
@@ -1216,7 +1220,7 @@ def _recursive_enable(parent):
 
 
 def _extract_path_from_iso(controller: Controller, dest: Path, node: FSTNode):
-    controller.iso.extract_path(node.path, dest)
+    controller.iso.extract_path(node.fullPath, dest)
 
 
 def _round_up_to_power_of_2(n):

@@ -1,90 +1,91 @@
 from __future__ import annotations
+from enum import IntEnum
 
 from io import BytesIO
+from typing import BinaryIO
 
 from pyisotools.iohelper import read_uint32, write_uint32
 
 
-class BI2(object):
-
-    class Country:
+class BI2(BytesIO):
+    class Country(IntEnum):
         JAPAN = 0
         AMERICA = 1
         EUROPE = 2
         KOREA = 0
 
-    def __init__(self, f):
-        self._rawdata = BytesIO(f.read(0x2000))
+    def __init__(self, f: BinaryIO):
+        super().__init__(f.read(0x2000))
 
     @property
     def debugMonitorSize(self) -> int:
-        self._rawdata.seek(0)
-        return read_uint32(self._rawdata)
+        self.seek(0)
+        return read_uint32(self)
 
     @debugMonitorSize.setter
     def debugMonitorSize(self, size: int):
-        self._rawdata.seek(0)
-        write_uint32(self._rawdata, size)
+        self.seek(0)
+        write_uint32(self, size)
 
     @property
     def simulatedMemSize(self) -> int:
-        self._rawdata.seek(4)
-        return read_uint32(self._rawdata)
+        self.seek(4)
+        return read_uint32(self)
 
     @simulatedMemSize.setter
     def simulatedMemSize(self, size: int):
-        self._rawdata.seek(4)
-        write_uint32(self._rawdata, size)
+        self.seek(4)
+        write_uint32(self, size)
 
     @property
     def debugFlag(self) -> int:
-        self._rawdata.seek(8)
-        return read_uint32(self._rawdata)
+        self.seek(8)
+        return read_uint32(self)
 
     @debugFlag.setter
     def debugFlag(self, flag: int):
-        self._rawdata.seek(8)
-        write_uint32(self._rawdata, flag)
-    
+        self.seek(8)
+        write_uint32(self, flag)
+
     @property
     def argumentOffset(self) -> int:
-        self._rawdata.seek(12)
-        return read_uint32(self._rawdata)
+        self.seek(12)
+        return read_uint32(self)
 
     @argumentOffset.setter
     def argumentOffset(self, offset: int):
-        self._rawdata.seek(12)
-        write_uint32(self._rawdata, offset)
+        self.seek(12)
+        write_uint32(self, offset)
 
     @property
     def trackLocation(self) -> int:
-        self._rawdata.seek(16)
-        return read_uint32(self._rawdata)
+        self.seek(16)
+        return read_uint32(self)
 
     @trackLocation.setter
     def trackLocation(self, loc: int):
-        self._rawdata.seek(16)
-        write_uint32(self._rawdata, loc)
+        self.seek(16)
+        write_uint32(self, loc)
 
     @property
     def trackSize(self) -> int:
-        self._rawdata.seek(20)
-        return read_uint32(self._rawdata)
+        self.seek(20)
+        return read_uint32(self)
 
     @trackSize.setter
     def trackSize(self, size: int):
-        self._rawdata.seek(20)
-        write_uint32(self._rawdata, size)
-    
+        self.seek(20)
+        write_uint32(self, size)
+
     @property
     def countryCode(self) -> int:
-        self._rawdata.seek(24)
-        return read_uint32(self._rawdata)
+        self.seek(24)
+        return read_uint32(self)
 
     @countryCode.setter
     def countryCode(self, code: BI2.Country):
-        self._rawdata.seek(24)
-        write_uint32(self._rawdata, code)
+        self.seek(24)
+        write_uint32(self, code)
 
-    def save(self, _io):
-        _io.write(self._rawdata.getvalue()[:0x2000])
+    def save(self, f: BinaryIO):
+        f.write(self.getvalue()[:0x2000])

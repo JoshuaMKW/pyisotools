@@ -1,200 +1,201 @@
 from __future__ import annotations
+from enum import IntEnum
 
 from io import BytesIO
+from typing import BinaryIO
 
 from pyisotools.iohelper import (read_string, read_ubyte, read_uint32,
                                  write_ubyte, write_uint32)
 
 
-class Boot(object):
-
-    class Country:
+class BootHeader(BytesIO):
+    class Country(IntEnum):
         JAPAN = 0
         AMERICA = 1
         PAL = 2
         KOREA = 0
 
-    class Type:
+    class Type(IntEnum):
         GCN = 0
         WII = 1
         UNKNOWN = -1
 
-    class Magic:
+    class Magic(IntEnum):
         GCNMAGIC = 0xC2339F3D
         WIIMAGIC = 0x5D1C9EA3
 
-    def __init__(self, f):
-        self._rawdata = BytesIO(f.read(0x440))
+    def __init__(self, f: BinaryIO):
+        super().__init__(f.read(0x440))
 
     @property
     def gameCode(self) -> str:
-        return read_string(self._rawdata, 0, 4)
+        return read_string(self, 0, 4)
 
     @gameCode.setter
     def gameCode(self, code: str):
-        self._rawdata.seek(0)
-        self._rawdata.write(code[:4].encode("ascii"))
+        self.seek(0)
+        self.write(code[:4].encode("ascii"))
 
     @property
     def makerCode(self) -> str:
-        return read_string(self._rawdata, 4, 2)
+        return read_string(self, 4, 2)
 
     @makerCode.setter
     def makerCode(self, code: str):
-        self._rawdata.seek(4)
-        self._rawdata.write(code[:2].encode("ascii"))
+        self.seek(4)
+        self.write(code[:2].encode("ascii"))
 
     @property
     def diskID(self) -> int:
-        self._rawdata.seek(6)
-        return read_ubyte(self._rawdata)
+        self.seek(6)
+        return read_ubyte(self)
 
     @diskID.setter
     def diskID(self, _id: int):
-        self._rawdata.seek(6)
-        write_ubyte(self._rawdata, _id)
+        self.seek(6)
+        write_ubyte(self, _id)
 
     @property
     def version(self) -> int:
-        self._rawdata.seek(7)
-        return read_ubyte(self._rawdata)
+        self.seek(7)
+        return read_ubyte(self)
 
     @version.setter
     def version(self, version: int):
-        self._rawdata.seek(7)
-        write_ubyte(self._rawdata, version)
+        self.seek(7)
+        write_ubyte(self, version)
 
     @property
     def audioStreaming(self) -> bool:
-        self._rawdata.seek(8)
-        return True if self._rawdata.read(1) == b"\x01" else False
+        self.seek(8)
+        return True if self.read(1) == b"\x01" else False
 
     @audioStreaming.setter
     def audioStreaming(self, active: bool):
-        self._rawdata.seek(8)
-        self._rawdata.write(b"\x01" if active is True else b"\x00")
+        self.seek(8)
+        self.write(b"\x01" if active is True else b"\x00")
 
     @property
     def streamBufferSize(self) -> int:
-        self._rawdata.seek(9)
-        return read_ubyte(self._rawdata)
+        self.seek(9)
+        return read_ubyte(self)
 
     @streamBufferSize.setter
     def streamBufferSize(self, size: int):
-        self._rawdata.seek(9)
-        write_ubyte(self._rawdata, size)
+        self.seek(9)
+        write_ubyte(self, size)
 
     @property
-    def gameType(self) -> Boot.Type:
-        self._rawdata.seek(24)
-        if read_uint32(self._rawdata) == Boot.Magic.WIIMAGIC:
-            return Boot.Type.WII
-        elif read_uint32(self._rawdata) == Boot.Magic.GCNMAGIC:
-            return Boot.Type.GCN
+    def gameType(self) -> BootHeader.Type:
+        self.seek(24)
+        if read_uint32(self) == BootHeader.Magic.WIIMAGIC:
+            return BootHeader.Type.WII
+        elif read_uint32(self) == BootHeader.Magic.GCNMAGIC:
+            return BootHeader.Type.GCN
         else:
-            return Boot.Type.UNKNOWN
+            return BootHeader.Type.UNKNOWN
 
     @gameType.setter
-    def gameType(self, _type: Boot.Type):
-        self._rawdata.seek(24)
-        if _type == Boot.Type.WII:
-            write_uint32(self._rawdata, Boot.Magic.WIIMAGIC)
-            write_uint32(self._rawdata, 0)
-        elif _type == Boot.Type.GCN:
-            write_uint32(self._rawdata, 0)
-            write_uint32(self._rawdata, Boot.Magic.GCNMAGIC)
+    def gameType(self, _type: BootHeader.Type):
+        self.seek(24)
+        if _type == BootHeader.Type.WII:
+            write_uint32(self, BootHeader.Magic.WIIMAGIC)
+            write_uint32(self, 0)
+        elif _type == BootHeader.Type.GCN:
+            write_uint32(self, 0)
+            write_uint32(self, BootHeader.Magic.GCNMAGIC)
         else:
-            write_uint32(self._rawdata, 0)
-            write_uint32(self._rawdata, 0)
+            write_uint32(self, 0)
+            write_uint32(self, 0)
 
     @property
     def gameName(self) -> str:
-        return read_string(self._rawdata, 0x20, 0x3E0)
+        return read_string(self, 0x20, 0x3E0)
 
     @gameName.setter
     def gameName(self, name: str):
-        self._rawdata.seek(0x20)
-        self._rawdata.write(name[:0x3E0].encode("ascii"))
+        self.seek(0x20)
+        self.write(name[:0x3E0].encode("ascii"))
 
     @property
     def debugMonitorOffset(self) -> int:
-        self._rawdata.seek(0x400)
-        return read_uint32(self._rawdata)
+        self.seek(0x400)
+        return read_uint32(self)
 
     @debugMonitorOffset.setter
     def debugMonitorOffset(self, offset: int):
-        self._rawdata.seek(0x400)
-        write_uint32(self._rawdata, offset)
+        self.seek(0x400)
+        write_uint32(self, offset)
 
     @property
     def debugMonitorVirtualAddr(self) -> int:
-        self._rawdata.seek(0x404)
-        return read_uint32(self._rawdata)
+        self.seek(0x404)
+        return read_uint32(self)
 
     @debugMonitorVirtualAddr.setter
     def debugMonitorVirtualAddr(self, addr: int):
-        self._rawdata.seek(0x404)
-        write_uint32(self._rawdata, addr)
+        self.seek(0x404)
+        write_uint32(self, addr)
 
     @property
     def dolOffset(self) -> int:
-        self._rawdata.seek(0x420)
-        return read_uint32(self._rawdata)
+        self.seek(0x420)
+        return read_uint32(self)
 
     @dolOffset.setter
     def dolOffset(self, offset: int):
-        self._rawdata.seek(0x420)
-        write_uint32(self._rawdata, offset)
+        self.seek(0x420)
+        write_uint32(self, offset)
 
     @property
     def fstOffset(self) -> int:
-        self._rawdata.seek(0x424)
-        return read_uint32(self._rawdata)
+        self.seek(0x424)
+        return read_uint32(self)
 
     @fstOffset.setter
     def fstOffset(self, offset: int):
-        self._rawdata.seek(0x424)
-        write_uint32(self._rawdata, offset)
+        self.seek(0x424)
+        write_uint32(self, offset)
 
     @property
     def fstSize(self) -> int:
-        self._rawdata.seek(0x428)
-        return read_uint32(self._rawdata)
+        self.seek(0x428)
+        return read_uint32(self)
 
     @fstSize.setter
     def fstSize(self, size: int):
-        self._rawdata.seek(0x428)
-        write_uint32(self._rawdata, size)
+        self.seek(0x428)
+        write_uint32(self, size)
 
     @property
     def fstMaxSize(self) -> int:
-        self._rawdata.seek(0x42C)
-        return read_uint32(self._rawdata)
+        self.seek(0x42C)
+        return read_uint32(self)
 
     @fstMaxSize.setter
     def fstMaxSize(self, size: int):
-        self._rawdata.seek(0x42C)
-        write_uint32(self._rawdata, size)
+        self.seek(0x42C)
+        write_uint32(self, size)
 
     @property
     def userVirtualAddress(self) -> int:
-        self._rawdata.seek(0x430)
-        return read_uint32(self._rawdata)
+        self.seek(0x430)
+        return read_uint32(self)
 
     @userVirtualAddress.setter
     def userVirtualAddress(self, addr: int):
-        self._rawdata.seek(0x430)
-        write_uint32(self._rawdata, addr)
+        self.seek(0x430)
+        write_uint32(self, addr)
 
     @property
     def firstFileOffset(self) -> int:
-        self._rawdata.seek(0x434)
-        return read_uint32(self._rawdata)
+        self.seek(0x434)
+        return read_uint32(self)
 
     @firstFileOffset.setter
     def firstFileOffset(self, size: int):
-        self._rawdata.seek(0x434)
-        write_uint32(self._rawdata, size)
+        self.seek(0x434)
+        write_uint32(self, size)
 
     def save(self, _io):
-        _io.write(self._rawdata.getvalue()[:0x440])
+        _io.write(self.getvalue()[:0x440])

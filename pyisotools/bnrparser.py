@@ -1,4 +1,5 @@
 from __future__ import annotations
+from enum import Enum, IntEnum
 
 import json
 
@@ -27,7 +28,7 @@ def io_preserve(func):
     return wrapper
 
 
-class Jobs:
+class Jobs(Enum):
     COMPILE = "COMPILE"
     EXTRACT = "EXTRACT"
 
@@ -88,7 +89,7 @@ class RGB5A3(object):
 
 
 class BNR(RGB5A3):
-    class Regions:
+    class Regions(IntEnum):
         AMERICA = 0
         EUROPE = 1
         JAPAN = 2

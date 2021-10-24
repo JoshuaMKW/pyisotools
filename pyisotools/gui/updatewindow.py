@@ -53,7 +53,7 @@ class Ui_UpdateDialog(object):
     # setupUi
 
     def retranslateUi(self, Dialog):
-        Dialog.setWindowTitle(QCoreApplication.translate("Dialog", u"Dialog", None))
+        Dialog.setWindowTitle(QCoreApplication.translate("Dialog", u"Update", None))
         self.delayButton.setText(QCoreApplication.translate("Dialog", u"Remind Me Later", None))
         self.updateButton.setText(QCoreApplication.translate("Dialog", u"Open GitHub", None))
         self.updateLabel.setText(QCoreApplication.translate("Dialog", u"New Update Available!", None))

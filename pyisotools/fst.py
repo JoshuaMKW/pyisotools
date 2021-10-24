@@ -1,10 +1,12 @@
 from __future__ import annotations
+import math
+from queue import Queue
 
 import sys
 from abc import ABC, abstractmethod
 from enum import Enum
 from fnmatch import fnmatch
-from io import BufferedIOBase, BytesIO, IOBase, RawIOBase, StringIO
+from io import BufferedIOBase, BytesIO, RawIOBase
 from pathlib import Path
 from typing import BinaryIO, Dict, Iterable, List, Optional, TextIO, Tuple, Union
 from .iohelper import read_string, read_ubyte, read_uint32, write_uint32
@@ -65,6 +67,22 @@ class FSTNode(ABC):
     @classproperty
     @abstractmethod
     def type(self) -> NodeType: ...
+
+    @property
+    @abstractmethod
+    def alignment(self) -> int: ...
+
+    @alignment.setter
+    @abstractmethod
+    def alignment(self, align: int): ...
+
+    @property
+    @abstractmethod
+    def position(self) -> int: ...
+
+    @position.setter
+    @abstractmethod
+    def position(self, position: int): ...
     
     @property
     @abstractmethod
@@ -100,10 +118,13 @@ class FSTNode(ABC):
     def num_children(self, onlyEnabled: bool = True) -> int: ...
 
     @abstractmethod
+    def has_manual_position(self) -> bool: ...
+
+    @abstractmethod
     def print(self, io: TextIO = sys.stdout): ...
 
     @property
-    def path(self) -> str:
+    def fullPath(self) -> str:
         path = self.name
         parent = self.parent
         while parent is not None:
@@ -126,7 +147,7 @@ class FSTNode(ABC):
         return self._active
 
     def __str__(self) -> str:
-        return self.path
+        return self.fullPath
 
     def __format__(self, format_spec: str) -> str:
         return str(self)
@@ -135,20 +156,16 @@ class FSTNode(ABC):
         return True
 
 
-class FSTFile(BytesIO, FSTNode):
+class FSTFile(FSTNode):
     alignment: int
     position: int
 
-    def __init__(self, name: str, data: Union[bytes, BinaryIO], alignment: int = 4, offset: Optional[int] = None, active: bool = True):
-        if isinstance(data, (RawIOBase, BufferedIOBase)):
-            super(BytesIO, self).__init__(data.read())
-        else:
-            super(BytesIO, self).__init__(data)
-
+    def __init__(self, name: str, size: int = 0, alignment: int = 4, offset: Optional[int] = None, active: bool = True):
         self.name = name
         self._alignment = alignment
         self._positionInfo: Tuple[int, bool] = tuple(offset, offset is not None)
-        self._active = True
+        self._active = active
+        self._fsize = size
 
     @classmethod
     def from_path(cls, path: Union[str, Path]) -> FSTNode:
@@ -160,7 +177,7 @@ class FSTFile(BytesIO, FSTNode):
             raise NotImplementedError(
                 f"Initializing an {cls.__name__} using {error} is not allowed")
 
-        node = cls(path.name, data=path.read_bytes())
+        node = cls(path.name)
         return node
         
 
@@ -228,6 +245,9 @@ class FSTFile(BytesIO, FSTNode):
 
     def num_children(self, onlyEnabled: bool = True) -> int:
         return 0
+        
+    def has_manual_position(self) -> bool:
+        return self._positionInfo[1]
 
     def print(self, io: TextIO = sys.stdout):
         io.write("\n".join([(" "*FSTNode._PrinterIndentWidth) *
@@ -246,12 +266,47 @@ class FSTFile(BytesIO, FSTNode):
         return hash(self) != hash(other)
 
     def __hash__(self) -> int:
-        return sum([ord(c) for c in self.name]) + hash(self.getvalue())
+        return (sum([ord(c) for c in self.name]) + hash(self.parent)) % (2**64)
+
+    def __len__(self) -> int:
+        return self._fsize
+
+    def __contains__(self, other: Union[FSTNode, Path]) -> bool:
+        return False
+
+
+class FSTFileIO(BytesIO, FSTFile):
+    alignment: int
+    position: int
+
+    def __init__(self, name: str, data: Union[bytes, BinaryIO], alignment: int = 4, offset: Optional[int] = None, active: bool = True):
+        if isinstance(data, (RawIOBase, BufferedIOBase)):
+            super(BytesIO, self).__init__(data.read())
+        else:
+            super(BytesIO, self).__init__(data)
+
+        self.name = name
+        self._alignment = alignment
+        self._positionInfo: Tuple[int, bool] = tuple(offset, offset is not None)
+        self._active = active
+
+    @classmethod
+    def from_path(cls, path: Union[str, Path]) -> FSTNode:
+        if isinstance(path, str):
+            path = Path(str)
+
+        if not path.is_file():
+            error = "a non file" if path.exists() else "a file that doesn't exist"
+            raise NotImplementedError(
+                f"Initializing an {cls.__name__} using {error} is not allowed")
+
+        node = cls(path.name, data=path.read_bytes())
+        return node
 
     def __len__(self) -> int:
         return len(self.getvalue())
 
-    def __contains__(self, other) -> bool:
+    def __contains__(self, other: Union[FSTNode, Path]) -> bool:
         return False
 
 
@@ -286,6 +341,22 @@ class FSTFolder(FSTNode):
     @classproperty
     def type(self) -> FSTNode.NodeType:
         return FSTNode.NodeType.FOLDER
+
+    @property
+    def alignment(self) -> int:
+        return None
+
+    @alignment.setter
+    def alignment(self, align: int):
+        pass
+
+    @property
+    def position(self) -> int:
+        return None
+
+    @position.setter
+    def position(self, position: int):
+        pass
 
     @property
     def children(self) -> Iterable[FSTNode]:
@@ -376,17 +447,17 @@ class FSTFolder(FSTNode):
 
         for node in self.recurse_files(skipExcluded):
             if doGlob:
-                if fnmatch(node.path, _path):
+                if fnmatch(node.fullPath, _path):
                     return node
             else:
-                if node.path.lower() == _path:
+                if node.fullPath.lower() == _path:
                     return node
         for node in self.recurse_dirs(skipExcluded):
             if doGlob:
-                if fnmatch(node.path, _path):
+                if fnmatch(node.fullPath, _path):
                     return node
             else:
-                if node.path.lower() == _path:
+                if node.fullPath.lower() == _path:
                     return node
 
 
@@ -403,6 +474,9 @@ class FSTFolder(FSTNode):
             return len([n for n in self.children if n.is_active()])
 
         return len([n for n in self.children])
+        
+    def has_manual_position(self) -> bool:
+        return False
 
     def print(self, io: TextIO = sys.stdout):
         io.write((" "*FSTNode._PrinterIndentWidth *
@@ -508,6 +582,28 @@ class FSTRoot(FSTFolder):
         return 4
 
 
+
+class _Progress(Queue):
+    def __init__(self, maxsize: int = 0):
+        super().__init__(maxsize)
+        self._jobSize = 0
+
+    def get_progress(self) -> float:
+        """ Returns a value between 0 and 1 """
+        progress = self.queue.get(True)
+        return math.floor(self.get_job_size() / progress, 1.0)
+
+    def set_progress(self, progress: int):
+        """ Sets the progress, clamped between 0 and the jobSize """
+        self.queue.put(math.ceil(math.floor(progress, self._jobSize), 0), False)
+
+    def get_job_size(self) -> int:
+        return self._jobSize
+
+    def set_job_size(self, size: int):
+        self._jobSize = size
+
+
 class FileSystemTable(FSTRoot):
     RootName = "root"
     FileSystemName = "files"
@@ -515,9 +611,10 @@ class FileSystemTable(FSTRoot):
     def __init__(self, children: Optional[List[FSTNode]] = None):
         super().__init__(children)
         self._nodeInfoTable = dict()
+        self.progress = _Progress()
 
         for i, child in enumerate(self.recurse_children(), start=1):
-            self._nodeInfoTable[child.path] = i
+            self._nodeInfoTable[child.fullPath] = i
 
     @classmethod
     def from_physical(cls, path: Union[str, Path]) -> FileSystemTable:
@@ -595,7 +692,7 @@ class FileSystemTable(FSTRoot):
         
         _strOfs = 0
         for i, child in enumerate(self.recurse_children(), start=1):
-            _idCache[child.path] = i
+            _idCache[child.fullPath] = i
             fst.write(b"\x01" if child.is_dir() else b"\x00")
             fst.write(_strOfs.to_bytes(3, "big", signed=False))
             write_uint32(fst, _idCache[child.parent.name] if child.is_dir() else child.position)
@@ -608,9 +705,9 @@ class FileSystemTable(FSTRoot):
             _strOfs += len(child.name) + 1
             fst.seek(_oldpos)
 
-    def realize(self, pathfst: Union[str, Path], pathdata: Union[str, Path]):
-        if isinstance(pathfst, str):
-            pathfst = Path(pathfst)
+    def realize(self, pathsys: Union[str, Path], pathdata: Union[str, Path]):
+        if isinstance(pathsys, str):
+            pathfst = Path(pathsys)
 
         if isinstance(pathdata, str):
             pathdata = Path(pathdata)
@@ -637,7 +734,7 @@ class FileSystemTable(FSTRoot):
             
             _strOfs = 0
             for i, child in enumerate(self.recurse_children(), start=1):
-                _idCache[child.path] = i
+                _idCache[child.fullPath] = i
                 fst.write(b"\x01" if child.is_dir() else b"\x00")
                 fst.write(_strOfs.to_bytes(3, "big", signed=False))
                 write_uint32(fst, _idCache[child.parent.name] if child.is_dir() else child.position)
@@ -651,7 +748,7 @@ class FileSystemTable(FSTRoot):
                 fst.seek(_oldpos)
 
                 # Create physical file/folder in OS filesystem
-                pdst = pathdata / child.path
+                pdst = pathdata / child.fullPath
                 if child.is_file():
                     pdst.write_bytes(child.getvalue())
                 elif child.is_dir():
