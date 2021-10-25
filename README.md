@@ -1,5 +1,7 @@
 # pyisotools
 
+![linter badge](https://github.com/JoshuaMKW/pyisotools/actions/workflows/python-linter.yml/badge.svg?branch=master)
+
 python library for working with Gamecube ISOs (GCM)
 
 ## Features
