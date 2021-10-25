@@ -17,6 +17,8 @@ from pyisotools.fst import FST, FSTNode, InvalidEntryError, InvalidFSTError
 from pyisotools.iohelper import (align_int, read_string, read_ubyte,
                                  read_uint32, write_uint32)
 
+# TODO: Convert _Progress to callback functions: [onExtractStart(), onExtractComplete(f_info | f_size), onExtractExit()], [onImportStart(), onImportComplete(f_info | f_size), onImportExit()]
+
 
 class FileSystemTooLargeError(Exception):
     pass
