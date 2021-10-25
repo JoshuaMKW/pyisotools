@@ -1,10 +1,10 @@
 import sys
 from pathlib import Path
 
-def resource_path(relative_path: str = "") -> Path:
+def resource_path(relPath: str = "") -> Path:
     """ Get absolute path to resource, works for dev and for cx_freeze """
     if hasattr(sys, "_MEIPASS"):
-        return getattr(sys, "_MEIPASS", Path(__file__).parent) / relative_path
+        return getattr(sys, "_MEIPASS", Path(__file__).parent) / relPath
     else:
         if getattr(sys, "frozen", False):
             # The application is frozen
@@ -12,7 +12,7 @@ def resource_path(relative_path: str = "") -> Path:
         else:
             base_path = Path(__file__).parent
             
-        return base_path / relative_path
+        return base_path / relPath
 
 def get_program_folder(folder: str = "") -> Path:
     """ Get path to appdata """

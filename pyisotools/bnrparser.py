@@ -10,11 +10,7 @@ from typing import Union
 
 from PIL import Image
 
-
-def _read_string(io, offset: int = 0, maxlen: int = 0, encoding: str = "iso-8859-1") -> str:
-    io.seek(offset)
-    cString = io.read(maxlen)
-    return cString.rstrip(b"\x00").decode(encoding)
+from pyisotools.iohelper import read_string
 
 
 def io_preserve(func):
@@ -181,7 +177,7 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def gameName(self) -> str:
-        return _read_string(self._rawdata, 0x1820 + (self.index * 0x140), 0x20, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return read_string(self._rawdata, 0x1820 + (self.index * 0x140), 0x20)
 
     @gameName.setter
     @io_preserve
@@ -194,7 +190,7 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def developerName(self) -> str:
-        return _read_string(self._rawdata, 0x1840 + (self.index * 0x140), 0x20, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return read_string(self._rawdata, 0x1840 + (self.index * 0x140), 0x20)
 
     @developerName.setter
     @io_preserve
@@ -207,7 +203,7 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def gameTitle(self) -> str:
-        return _read_string(self._rawdata, 0x1860 + (self.index * 0x140), 0x40, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return read_string(self._rawdata, 0x1860 + (self.index * 0x140), 0x40)
 
     @gameTitle.setter
     @io_preserve
@@ -220,7 +216,7 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def developerTitle(self) -> str:
-        return _read_string(self._rawdata, 0x18A0 + (self.index * 0x140), 0x40, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return read_string(self._rawdata, 0x18A0 + (self.index * 0x140), 0x40)
 
     @developerTitle.setter
     @io_preserve
@@ -233,7 +229,7 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def gameDescription(self) -> str:
-        return _read_string(self._rawdata, 0x18E0 + (self.index * 0x140), 0x80, encoding="iso-8859-1" if self.region != "NTSC-J" else "shift-jis")
+        return read_string(self._rawdata, 0x18E0 + (self.index * 0x140), 0x80)
 
     @gameDescription.setter
     @io_preserve

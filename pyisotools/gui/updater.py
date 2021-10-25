@@ -1,97 +1,137 @@
+from logging import StreamHandler
 import re
 import sys
 import time
 
-from distutils.version import LooseVersion
-from typing import Union
-from urllib import request
+import webbrowser
 
-from bs4 import BeautifulSoup
+from github import Github
+from github.GitRelease import GitRelease
+
+from distutils.version import LooseVersion
+from typing import Iterable, List, Optional, Union
+
 from PySide2.QtCore import Signal
 
-from .. import __version__
-from .flagthread import FlagThread
-
-class ReleaseData(object):
-    def __init__(self, version: str = None, info: str = None, downloadLinks: list = None, parentURL: str = None):
-        self.version = version
-        self.info = info
-        self.downloads = downloadLinks
-        self.parentURL = parentURL
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}<version={self.version}, info={self.info}, downloads={self.downloads}"
+try:
+    from .. import __version__
+    from .flagthread import FlagThread
+except ImportError:
+    from pyisotools import __version__
+    from pyisotools.gui.flagthread import FlagThread
 
 
-class GitReleaseUpdateScraper(FlagThread):
-
-    updateFound = Signal(ReleaseData)
-
-    def __init__(self, owner: str, repository: str, parent=None):
-        super().__init__(parent)
+class ReleaseManager(object):
+    def __init__(self, owner: str, repository: StreamHandler):
         self._owner = owner
         self._repo = repository
-        self.skipCount = 0
-        self.setObjectName(f"{self.__class__.__name__}.{owner}.{repository}")
+        self._releases: List[GitRelease] = list()
+        self.populate()
 
+    @property
     def owner(self):
         return self._owner
 
-    def repo(self):
+    @property
+    def repository(self):
         return self._repo
 
-    def set_owner(self, owner: str):
+    @owner.setter
+    def owner(self, owner: str):
         self._owner = owner
 
-    def set_repo(self, repo: str):
+    @repository.setter
+    def repository(self, repo: str):
         self._repo = repo
 
     @property
-    def gitReleasesPageURL(self) -> str:
+    def releaseLatestURL(self) -> str:
         return f"https://github.com/{self._owner}/{self._repo}/releases/latest"
 
-    def request_release_data(self):
-        """ Returns soup data of the repository releases tab """
-        with request.urlopen(self.gitReleasesPageURL) as response:
-            html = response.read()
-        return html
+    @property
+    def releasesURL(self) -> str:
+        return f"https://github.com/{self._owner}/{self._repo}/releases"
 
-    def get_newest_version(self) -> Union[ReleaseData, str]:
-        """ Returns newest release version """
-        try:
-            response = self.request_release_data()
-            soup = BeautifulSoup(response, "html.parser")
+    def get_newest_release(self) -> GitRelease:
+        return self._releases[0]
 
-            version = soup.find("span", {"class": "css-truncate-target"}).get_text(strip=True)
-            info = soup.find("div", {"class": "markdown-body"})
-            downloads = ["https://github.com" + l.get("href").strip() for l in soup.find_all("a", href=True) if "download" in l.get("href").split("/")]
+    def get_oldest_release(self) -> GitRelease:
+        return self._releases[-1]
 
-            releaseInfo = ReleaseData(version, info, downloads, self.gitReleasesPageURL)
-            return releaseInfo
-        except AttributeError:
-            return "No data could be found"
-        except request.HTTPError as e:
-            return f"HTTP request failed with error code ({e.code})"
-        except request.URLError:
-            return "Request failed, ensure you have a working internet connection and try again"
+    def iter_releases(self) -> Iterable[GitRelease]:
+        for v in self._releases:
+            yield v
 
-    def run(self, period: float = 1.0):
-        while True and not self.isQuitting():
-            if self.skipCount <= 0:
-                self.skipCount = 0
-                
-                info = self.get_newest_version()
-                if isinstance(info, ReleaseData) and LooseVersion(info.version.lstrip("v")) > LooseVersion(__version__.lstrip("v")):
-                    self.updateFound.emit(info)
-            else:
-                self.skipCount -= 1
-            
-            time.sleep(period)
+    def compile_changelog_from(self, version: str) -> str:
+        """ Returns a Markdown changelog from the info of future versions """
+        seperator = "\n\n---\n\n"
+
+        newReleases: List[GitRelease] = list()
+        lver = LooseVersion(version.lstrip("v"))
+        for release in self.iter_releases():
+            if LooseVersion(release.tag_name.lstrip("v")) <= lver:
+                break
+            newReleases.append(release)
+
+        markdown = ""
+        for release in newReleases:
+            markdown += release.body.replace("Changelog",
+                                             f"Changelog ({release.tag_name})").strip() + seperator
+
+        return markdown.rstrip(seperator).strip()
+
+    def populate(self) -> bool:
+        g = Github()
+        repo = g.get_repo(f"{self.owner}/{self.repository}")
+        self._releases = repo.get_releases()
+        return True
+
+    def view(self, release: GitRelease, browser: Optional[webbrowser.GenericBrowser] = None, asWindow: bool = False):
+        if browser is None:
+            webbrowser.open(release.html_url, int(asWindow))
+        else:
+            browser.open(release.html_url, int(asWindow))
+
+
+class GitUpdateScraper(FlagThread, ReleaseManager):
+
+    updateFound = Signal()
+
+    def __init__(self, owner: str, repository: str, parent=None):
+        super(FlagThread, self).__init__(parent)
+        ReleaseManager.__init__(self, owner, repository)
+        self.setObjectName(f"{self.__class__.__name__}.{owner}.{repository}")
+
+        self.waitTime = 0.0
+
+    def set_wait_time(self, seconds: float):
+        self.waitTime = seconds
+
+    def run(self):
+        while not self.isQuitting():
+            successful = self.populate()
+            if successful and LooseVersion(self.get_newest_release().tag_name.lstrip("v")) > LooseVersion(__version__.lstrip("v")):
+                self.updateFound.emit()
+
+            start = time.time()
+            while time.time() - start < self.waitTime and not self.isQuitting():
+                time.sleep(1)
 
     def kill(self):
-        self.exit(0)
+        self.quit()
+
 
 if __name__ == "__main__":
-    updater = GitReleaseUpdateScraper("JoshuaMKW", "GeckoLoader")
-    state, releaseInfo = updater.get_newest_version()
-    print(releaseInfo)
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(
+        f"pyisotools v{__version__}", description="ISO tool for extracting/building Gamecube ISOs", allow_abbrev=False)
+
+    parser.add_argument("owner")
+    parser.add_argument("repository")
+
+    args = parser.parse_args()
+
+    updater = GitUpdateScraper(args.owner, args.repository)
+    release = updater.get_newest_release()
+    print(release)

@@ -6,19 +6,19 @@ from typing import Union
 
 
 class FileAccessOnFolderError(Exception):
-    pass
+    ...
 
 
 class FolderAccessOnFileError(Exception):
-    pass
+    ...
 
 
 class InvalidEntryError(Exception):
-    pass
+    ...
 
 
 class InvalidFSTError(Exception):
-    pass
+    ...
 
 
 class FSTNode(object):
@@ -63,7 +63,6 @@ class FSTNode(object):
         for child in children:
             self.add_child(child)
 
-
     def __repr__(self):
         if self.is_dir():
             info = f"Parent: {self._parent}, Children: {self.size}"
@@ -88,7 +87,8 @@ class FSTNode(object):
         if path.is_file():
             node = cls.file(path.name, size=path.stat().st_size())
         elif path.is_dir():
-            node = cls.folder(path.name, children=[cls.from_path(f) for f in path.iterdir()])
+            node = cls.folder(path.name, children=[
+                              cls.from_path(f) for f in path.iterdir()])
         else:
             raise NotImplementedError(
                 "Initializing a node using anything other than a file or folder is not allowed")
@@ -125,7 +125,7 @@ class FSTNode(object):
         for node in self.children:
             if includedOnly and node._exclude:
                 continue
-            
+
             if node.is_dir():
                 yield node
                 yield from node.rdirs(includedOnly=includedOnly)
@@ -144,7 +144,7 @@ class FSTNode(object):
         for node in self.children:
             if includedOnly and node._exclude:
                 continue
-            
+
             yield node
             yield from node.rchildren(includedOnly=includedOnly)
 

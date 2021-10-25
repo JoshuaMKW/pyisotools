@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import IntEnum
+
 from PySide2.QtCore import Qt
 from PySide2.QtGui import (QKeyEvent, QKeySequence, QRegExpValidator,
                            QTextOption)
@@ -10,7 +12,7 @@ from ..fst import FSTNode
 
 class FilteredPlainTextEdit(QPlainTextEdit):
 
-    class ScrollPolicy:
+    class ScrollPolicy(IntEnum):
         NoScroll = 0
         ScrollVertical = 1
         ScrollHorizontal = 2
@@ -147,6 +149,7 @@ class FSTTreeItem(QTreeWidgetItem):
         self.node._exclude = exclude
 
     def __lt__(self, other: FSTTreeItem):
+        """ Used for tree sorting """
         if self.node.is_root() and not other.node.is_root():
             return True
         elif self.node.is_dir() and other.node.is_file():

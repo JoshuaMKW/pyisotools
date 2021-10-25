@@ -75,7 +75,7 @@ class ISOBase(_ISOInfo):
         _size = read_uint32(fst)
 
         _oldpos = fst.tell()
-        node.name = read_string(fst, strTabOfs + _nameOfs, encoding="shift-jis")
+        node.name = read_string(fst, strTabOfs + _nameOfs)
         fst.seek(_oldpos)
 
         node._id = self._curEntry
@@ -297,7 +297,7 @@ class GamecubeISO(ISOBase):
 
             _oldpos = self._rawFST.tell()
             self._rawFST.seek(_strOfs + _strTableOfs)
-            self._rawFST.write(child.name.encode("shift-jis") + b"\x00")
+            self._rawFST.write(child.name.encode() + b"\x00")
             _strOfs += len(child.name) + 1
             self._rawFST.seek(_oldpos)
 
