@@ -12,20 +12,13 @@ jobs:
       uses: actions/setup-python@v2.2.2
       with:
         python-version: 3.9
-    - name: Install pypa/build
-      run: >-
-        python -m
-        pip install
-        build
-        --user
+    - name: Install Packages
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint
     - name: Build a binary wheel and a source tarball
-      run: >-
-        python -m
-        build
-        --sdist
-        --wheel
-        --outdir dist/
-        .
+      run: |
+        python setup.py sdist bdist_wheel
     - name: Publish distribution 📦 to Test PyPI
       uses: pypa/gh-action-pypi-publish@master
       with:
