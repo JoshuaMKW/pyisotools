@@ -580,17 +580,11 @@ class Controller(QMainWindow):
 
         if self._fromIso:
             with self.iso.isoPath.open("rb") as f:
-                def get_bnrs(node: FSTNode):
-                    for n in node.children:
-                        print(n.path)
-                        if n.is_file() and n.name.endswith(".bnr"):
-                            f.seek(n._fileoffset)
-                            self.bnrMap[n.path] = BNR.from_data(
-                                f, size=n.size)
-                        elif n.is_dir():
-                            get_bnrs(n)
-
-                get_bnrs(self.iso)
+                for node in self.iso.rchildren():
+                    if node.is_file() and node.name.endswith(".bnr"):
+                        f.seek(node._fileoffset)
+                        self.bnrMap[node.path] = BNR.from_data(
+                            f, size=node.size)
 
         self.ui.bannerComboBox.clear()
         self.ui.bannerComboBox.addItems(sorted(
