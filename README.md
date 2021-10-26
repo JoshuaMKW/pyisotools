@@ -1,6 +1,6 @@
 # pyisotools
 
-![linter badge](https://github.com/JoshuaMKW/pyisotools/workflows/Pylint/badge.svg?branch=main)
+![badge](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/<user>/<gist-ID>/raw/test.json)
 [![PyPI Upload](https://github.com/JoshuaMKW/pyisotools/actions/workflows/publish-to-pypi.yml/badge.svg)](https://github.com/JoshuaMKW/pyisotools/actions/workflows/publish-to-pypi.yml)
 
 python library for working with Gamecube ISOs (GCM)
