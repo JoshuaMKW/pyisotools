@@ -4,9 +4,7 @@ on: [push]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python 3.9
@@ -18,12 +16,18 @@ jobs:
         python -m pip install --upgrade pip
         pip install pylint
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Analysing the code with pylint
+    - name: Quality checking the code with pylint
       run: |
-        python -m pylint --fail-under=10 `find -regextype egrep -regex '(.*.py)$'` |
-        tee pylint.txt
-    - name: Upload pylint.txt as artifact
-      uses: actions/upload-artifact@v2
+        python -m linter.py pyisotools 7.0
+  badge:
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - uses: Schneegans/dynamic-badges-action@v1.1.0
       with:
-        name: pylint report
-        path: pylint.txt
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: c0db8774048c6d42759903ca1b6a21e9
+        filename: pylint.json
+        label: Pylint
+        message: ${{ env.PYLINT_VALUE }}
+        color: ${{ env.PYLINT_COLOR }}
