@@ -16,6 +16,7 @@ def lint(path: str, threshold: float):
     results = Run(["pyisotools"], do_exit=False)
     score = results.linter.stats["global_note"]
 
+    print(" ".join(["echo", "{PYLINT_COLOR}={red}", ">>", "$GITHUB_ENV"]))
     if results.linter.msg_status & 3:
         subprocess.run(["echo", "{PYLINT_COLOR}={red}", ">>", "$GITHUB_ENV"])
         subprocess.run(["echo", "{PYLINT_VALUE}={failing}", ">>", "$GITHUB_ENV"])
@@ -30,7 +31,6 @@ def lint(path: str, threshold: float):
     else:
         color = "green"
 
-    print("{PYLINT_COLOR}="+"{"+color+"}")
     subprocess.run(["echo", "{PYLINT_COLOR}="+"{"+color+"}", ">>", "$GITHUB_ENV"])
     subprocess.run(["echo", "{PYLINT_VALUE}="+"{"+str(score)[:4]+"}", ">>", "$GITHUB_ENV"])
 
