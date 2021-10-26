@@ -2,6 +2,10 @@ name: Pylint
 
 on: [push]
 
+env:
+  PYLINT_VALUE: "failing"
+  PYLINT_COLOR: "red"
+
 jobs:
   build:
     runs-on: ubuntu-latest
