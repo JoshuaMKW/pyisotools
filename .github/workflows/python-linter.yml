@@ -2,9 +2,9 @@ name: Pylint
 
 on: [push]
 
-env:
-  PYLINT_VALUE: "failing"
-  PYLINT_COLOR: "red"
+#env:
+#  PYLINT_VALUE: "failing"
+#  PYLINT_COLOR: "red"
 
 jobs:
   build:
