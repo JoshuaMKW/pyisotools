@@ -22,7 +22,7 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Quality checking the code with pylint
       run: |
-        python -m linter.py pyisotools 7.0
+        python -m linter.py pyisotools -t 7.0
   badge:
     needs: build
     if: always()
