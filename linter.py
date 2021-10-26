@@ -17,8 +17,8 @@ def lint(path: str, threshold: float):
     score = results.linter.stats["global_note"]
 
     if results.linter.msg_status & 3:
-        subprocess.run(["echo", f"::set-env name=PYLINT_COLOR::red"])
-        subprocess.run(["echo", f"::set-env name=PYLINT_VALUE::failing"])
+        subprocess.run(["echo", "{PYLINT_COLOR}={red}", ">>", "$GITHUB_ENV"])
+        subprocess.run(["echo", "{PYLINT_VALUE}={failing}", ">>", "$GITHUB_ENV"])
         raise CodeQualityError("Code is erroneous!")
 
     if score < 3:
@@ -30,8 +30,9 @@ def lint(path: str, threshold: float):
     else:
         color = "green"
 
-    subprocess.run(["echo", f"::set-env name=PYLINT_COLOR::{color}"])
-    subprocess.run(["echo", f"::set-env name=PYLINT_VALUE::{score}"])
+    print("{PYLINT_COLOR}="+"{"+color+"}")
+    subprocess.run(["echo", "{PYLINT_COLOR}="+"{"+color+"}", ">>", "$GITHUB_ENV"])
+    subprocess.run(["echo", "{PYLINT_VALUE}="+"{"+str(score)[:4]+"}", ">>", "$GITHUB_ENV"])
 
     if score < threshold:
         raise CodeQualityError(
