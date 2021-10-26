@@ -14,8 +14,8 @@ ignore=CVS
 
 # Add files or directories matching the regex patterns to the blacklist. The
 # regex matches against base names, not paths.
-ignore-patterns=[a-zA-Z0-9_/]*/gui/[a-zA-Z0-9_]*window.py,
-                [a-zA-Z0-9_/]*/gui/icons_rc.py
+ignore-patterns=pyisotools/gui/[a-zA-Z0-9_]*window.py,
+                pyisotools/gui/icons_rc.py
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
@@ -411,7 +411,7 @@ contextmanager-decorators=contextlib.contextmanager
 # List of members which are set dynamically and missed by pylint inference
 # system, and so shouldn't trigger E1101 when accessed. Python regular
 # expressions are accepted.
-generated-members=PySide2.*
+generated-members=PySide2.*.*
 
 # Tells whether missing members accessed in mixin class should be ignored. A
 # mixin class is detected if its name ends with "mixin" (case insensitive).

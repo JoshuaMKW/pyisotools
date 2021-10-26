@@ -3,6 +3,7 @@ import os
 
 from glob import glob
 import sys
+import subprocess
 from typing import Optional, Tuple
 from pylint.lint import Run
 
@@ -15,24 +16,26 @@ def lint(path: str, threshold: float):
     results = Run(["pyisotools"], do_exit=False)
     score = results.linter.stats["global_note"]
 
-    if score < 3:
-        os.environ["PYLINT_COLOR"] = "red"
-    elif score < 5:
-        os.environ["PYLINT_COLOR"] = "orange"
-    elif score < 7:
-        os.environ["PYLINT_COLOR"] = "yellow"
-    else:
-        os.environ["PYLINT_COLOR"] = "green"
-        os.environ["PYLINT_VALUE"] = score
-
-    print(score, results.linter.msg_status)
-    if score < threshold:
-        raise CodeQualityError(
-            f"Code quality is too poor [{score} < {threshold}]")
-    elif results.linter.msg_status & 3:
+    if results.linter.msg_status & 3:
         os.environ["PYLINT_COLOR"] = "red"
         os.environ["PYLINT_VALUE"] = "test"
         raise CodeQualityError("Code is erroneous!")
+
+    if score < 3:
+        color = "red"
+    elif score < 5:
+        color = "orange"
+    elif score < 7:
+        color = "yellow"
+    else:
+        color = "green"
+
+    subprocess.run(["echo", f"::set-env name=PYLINT_COLOR::{color}"])
+    subprocess.run(["echo", f"::set-env name=PYLINT_VALUE::{score}"])
+
+    if score < threshold:
+        raise CodeQualityError(
+            f"Code quality is too poor [{score} < {threshold}]")
 
 
 def main(args: Optional[Tuple[str]] = None):
