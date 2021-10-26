@@ -17,8 +17,8 @@ def lint(path: str, threshold: float):
     score = results.linter.stats["global_note"]
 
     if results.linter.msg_status & 3:
-        os.environ["PYLINT_COLOR"] = "red"
-        os.environ["PYLINT_VALUE"] = "test"
+        subprocess.run(["echo", f"::set-env name=PYLINT_COLOR::red"])
+        subprocess.run(["echo", f"::set-env name=PYLINT_VALUE::failing"])
         raise CodeQualityError("Code is erroneous!")
 
     if score < 3:
