@@ -245,6 +245,12 @@ class Controller(QMainWindow):
         LIGHT = 0
         DARK = 0
 
+    _singleInstance: Controller = None
+
+    @staticmethod
+    def get_instance() -> "Controller":
+        return Controller._singleInstance
+
     @staticmethod
     def get_config_path():
         versionStub = __version__.replace(".", "-")
@@ -263,6 +269,11 @@ class Controller(QMainWindow):
             subprocess.Popen(["xdg-open", path.resolve()])
         elif sys.platform == "darwin":
             subprocess.Popen(['open', '--', path.resolve()])
+
+    def __new__(cls, *args, **kwargs) -> "Controller":
+        if not cls._singleInstance:
+            cls._singleInstance = super().__new__(cls, *args, **kwargs)
+        return cls._singleInstance
 
     def __init__(self, ui: Ui_MainWindow, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -345,7 +356,16 @@ class Controller(QMainWindow):
 
         if self.rootPath.is_file():
             self._fromIso = True
-            self.iso = GamecubeISO.from_iso(self.rootPath)
+
+            iso = GamecubeISO.from_iso(self.rootPath)
+            iso.on_physical_job_start = self._iso_start_cb
+            iso.on_physical_job_complete = self._iso_complete_cb
+            iso.on_physical_job_exit = self._iso_exit_cb
+            iso.on_virtual_job_start = self._iso_start_cb
+            iso.on_virtual_job_complete = self._iso_complete_cb
+            iso.on_virtual_job_exit = self._iso_exit_cb
+            self.iso = iso
+
             self.ui.actionClose.setEnabled(True)
             self.ui.actionSave.setEnabled(True)
             self.ui.actionRebuild.setEnabled(False)
@@ -380,7 +400,16 @@ class Controller(QMainWindow):
         self.rootPath = selected
         if self.rootPath.is_dir():
             self._fromIso = False
-            self.iso = GamecubeISO.from_root(self.rootPath, True)
+
+            iso = GamecubeISO.from_root(self.rootPath, True)
+            iso.on_physical_job_start = self._iso_start_cb
+            iso.on_physical_job_complete = self._iso_complete_cb
+            iso.on_physical_job_exit = self._iso_exit_cb
+            iso.on_virtual_job_start = self._iso_start_cb
+            iso.on_virtual_job_complete = self._iso_complete_cb
+            iso.on_virtual_job_exit = self._iso_exit_cb
+            self.iso = iso
+
             self.bnrMap = self.iso.bnr
             self.ui.bannerComboBox.clear()
             self.ui.bannerComboBox.addItems(sorted(
@@ -419,20 +448,9 @@ class Controller(QMainWindow):
             return False
 
         self.buildPath = Path(dialog.selectedFiles()[0]).resolve()
-
         self.save_all(False)
 
-        isoProcess = FlagThread(target=self.iso.build, args=(
-            self.buildPath, False), parent=self)
-        progressBarProcess = ProgressHandler(self, isoProcess, self)
-
-        isoProcess.start()
-
-        while not self.iso.progress.is_ready() and isoProcess.is_alive():
-            pass
-
-        if isoProcess.is_alive():
-            progressBarProcess.run()
+        self.iso.build(self.buildPath, False)
 
         return True
 
@@ -448,20 +466,9 @@ class Controller(QMainWindow):
             return False
 
         self.extractPath = Path(dialog.selectedFiles()[0]).resolve()
-
         self.save_all(False)
 
-        isoProcess = FlagThread(target=self.iso.extract, args=(
-            self.extractPath, dumpPositions), parent=self)
-        progressBarProcess = ProgressHandler(self, isoProcess, self)
-
-        isoProcess.start()
-
-        while not self.iso.progress.is_ready() and isoProcess.is_alive():
-            pass
-
-        if isoProcess.is_alive():
-            progressBarProcess.run()
+        self.iso.extract(self.extractPath, dumpPositions)
 
         return True
 
@@ -477,18 +484,7 @@ class Controller(QMainWindow):
             return False
 
         self.genericPath = Path(dialog.selectedFiles()[0]).resolve()
-
-        isoProcess = FlagThread(
-            target=self.iso.extract_system_data, args=(self.genericPath,), parent=self)
-        progressBarProcess = ProgressHandler(self, isoProcess, self)
-
-        isoProcess.start()
-
-        while not self.iso.progress.is_ready() and isoProcess.is_alive():
-            pass
-
-        if isoProcess.is_alive():
-            progressBarProcess.run()
+        self.iso.extract_system_data(self.genericPath)
 
         return True
 
@@ -1180,6 +1176,24 @@ class Controller(QMainWindow):
                 treeNode.setIcon(0, QIcon(u":/icons/File"))
 
             parent.addChild(treeNode)
+
+    @staticmethod
+    def _iso_start_cb(jobSize: int) -> None:
+        controller = Controller.get_instance()
+        controller.ui.operationProgressBar.setTextVisible(True)
+        controller.ui.operationProgressBar.setMaximum(jobSize)
+        controller.ui.operationProgressBar.setValue(0)
+    
+    @staticmethod
+    def _iso_complete_cb(progress: int) -> None:
+        controller = Controller.get_instance()
+        current = controller.ui.operationProgressBar.value()
+        controller.ui.operationProgressBar.setValue(current + progress)
+    
+    @staticmethod
+    def _iso_exit_cb(completed: int) -> None:
+        controller = Controller.get_instance()
+        controller.ui.operationProgressBar.setValue(completed)
 
 
 class ProgressHandler(FlagThread):

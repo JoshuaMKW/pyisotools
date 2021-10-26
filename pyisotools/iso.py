@@ -4,7 +4,7 @@ import json
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Union
+from typing import BinaryIO, Callable, Optional, Union
 
 from dolreader.dol import DolFile
 from sortedcontainers import SortedDict, SortedList
@@ -17,27 +17,14 @@ from pyisotools.fst import FST, FSTNode, InvalidEntryError, InvalidFSTError
 from pyisotools.iohelper import (align_int, read_string, read_ubyte,
                                  read_uint32, write_uint32)
 
-# TODO: Convert _Progress to callback functions: [onExtractStart(), onExtractComplete(f_info | f_size), onExtractExit()], [onImportStart(), onImportComplete(f_info | f_size), onImportExit()]
+# TODO: Convert _Progress to callback functions: [onPhysicalJobStart(), onPhysicalJobComplete(f_info | f_size), onPhysicalJobExit()], [onImportStart(), onImportComplete(f_info | f_size), onImportExit()]
 
 
 class FileSystemTooLargeError(Exception):
-    pass
+    ...
 
 class FileSystemInvalidError(Exception):
-    pass
-
-class _Progress(object):
-    def __init__(self):
-        self.jobProgress = 0
-        self.jobSize = 0
-        self._isReady = False
-
-    def set_ready(self, ready: bool):
-        self._isReady = ready
-
-    def is_ready(self) -> bool:
-        return self._isReady
-
+    ...
 
 class _ISOInfo(FST):
 
@@ -55,7 +42,16 @@ class ISOBase(_ISOInfo):
 
     def __init__(self):
         super().__init__()
-        self.progress = _Progress()
+
+        # File extraction callbacks
+        self._onPhysicalJobStart: Callable[[int], None] = None
+        self._onPhysicalJobComplete: Callable[[int], None] = None
+        self._onPhysicalJobExit: Callable[[int], None] = None
+
+        # ISO build callbacks
+        self._onVirtualJobStart: Callable[[int], None] = None
+        self._onVirtualJobComplete: Callable[[int], None] = None
+        self._onVirtualJobExit: Callable[[int], None] = None
 
         self.isoPath = None
         self.bootheader = None
@@ -67,6 +63,70 @@ class ISOBase(_ISOInfo):
         self._alignmentTable = SortedDict()
         self._locationTable = SortedDict()
         self._excludeTable = SortedList()
+
+    @staticmethod
+    def __default_callback(*args, **kwargs) -> None:
+        return None
+
+    @property
+    def on_physical_job_start(self) -> Callable[[int], None]:
+        if self._onPhysicalJobStart:
+            return self._onPhysicalJobStart
+        return self.__default_callback
+
+    @on_physical_job_start.setter
+    def on_physical_job_start(self, cb: Callable[[int], None]):
+        self._onPhysicalJobStart = cb
+    
+    @property
+    def on_physical_job_complete(self) -> Callable[[int], None]:
+        if self._onPhysicalJobComplete:
+            return self._onPhysicalJobComplete
+        return self.__default_callback
+
+    @on_physical_job_complete.setter
+    def on_physical_job_complete(self, cb: Callable[[int], None]):
+        self._onPhysicalJobComplete = cb
+    
+    @property
+    def on_physical_job_exit(self) -> Callable[[int], None]:
+        if self._onPhysicalJobExit:
+            return self._onPhysicalJobExit
+        return self.__default_callback
+
+    @on_physical_job_exit.setter
+    def on_physical_job_exit(self, cb: Callable[[int], None]):
+        self._onPhysicalJobExit = cb
+
+    @property
+    def on_virtual_job_start(self) -> Callable[[int], None]:
+        if self._onVirtualJobStart:
+            return self._onVirtualJobStart
+        return self.__default_callback
+
+    @on_virtual_job_start.setter
+    def on_virtual_job_start(self, cb: Callable[[int], None]):
+        self._onVirtualJobStart = cb
+    
+    @property
+    def on_virtual_job_complete(self) -> Callable[[int], None]:
+        if self._onVirtualJobComplete:
+            return self._onVirtualJobComplete
+        return self.__default_callback
+
+    @on_virtual_job_complete.setter
+    def on_virtual_job_complete(self, cb: Callable[[int], None]):
+        self._onVirtualJobComplete = cb
+    
+    @property
+    def on_virtual_job_exit(self) -> Callable[[int], None]:
+        if self._onVirtualJobExit:
+            return self._onVirtualJobExit
+        return self.__default_callback
+
+    @on_virtual_job_exit.setter
+    def on_virtual_job_exit(self, cb: Callable[[int], None]):
+        self._onVirtualJobExit = cb
 
     def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> FSTNode:
         _type = read_ubyte(fst)
@@ -113,11 +173,11 @@ class ISOBase(_ISOInfo):
             self._locationTable = SortedDict(data["location"])
             self._excludeTable = SortedList(data["exclude"])
 
-    def _recursive_extract(self, node: FSTNode, dest: Path, iso, dumpPositions: bool = False):
+    def _recursive_extract(self, node: FSTNode, dest: Path, iso: BinaryIO, dumpPositions: bool = False):
         if node.is_file():
             iso.seek(node._fileoffset)
             dest.write_bytes(iso.read(node.size))
-            self.progress.jobProgress += node.size
+            self.on_physical_job_complete(node.size)
         else:
             dest.mkdir(parents=True, exist_ok=True)
             for child in node.children:
@@ -258,10 +318,7 @@ class GamecubeISO(ISOBase):
             return False
 
     def build(self, dest: Union[Path, str] = None, preCalc: bool = True):
-        self.progress.set_ready(False)
-        self.progress.jobProgress = 0
-        self.progress.jobSize = self.MaxSize
-        self.progress.set_ready(True)
+        self.on_virtual_job_start(self.MaxSize)
 
         if dest is not None:
             fmtpath = str(dest).replace(
@@ -341,48 +398,44 @@ class GamecubeISO(ISOBase):
 
         with self.isoPath.open("wb") as f:
             self.bootheader.save(f)
-            self.progress.jobProgress += 0x440
+            self.on_virtual_job_complete(0x440)
 
             self.bootinfo.save(f)
-            self.progress.jobProgress += 0x2000
+            self.on_virtual_job_complete(0x2000)
 
             self.apploader.save(f)
-            self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+            self.on_virtual_job_complete(self.apploader.loaderSize + self.apploader.trailerSize)
 
             f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
             self.dol.save(f, self.bootheader.dolOffset)
-            self.progress.jobProgress += self.dol.size
+            self.on_virtual_job_complete(self.dol.size)
 
             f.seek(f.tell() + self.dol.size)
             f.write(b"\x00" * (self.bootheader.fstOffset - f.tell()))
 
             f.write(self._rawFST.getvalue())
-            self.progress.jobProgress += len(self._rawFST.getbuffer())
+            self.on_virtual_job_complete(len(self._rawFST.getbuffer()))
             
             for child in self.rfiles(includedOnly=True):
                 f.write(b"\x00" * (child._fileoffset - f.tell()))
                 f.seek(child._fileoffset)
                 f.write((self.dataPath / child.path).read_bytes())
                 f.seek(0, 2)
-                self.progress.jobProgress += child.size
+                self.on_virtual_job_complete(child.size)
 
             f.write(b"\x00" * (self.MaxSize - f.tell()))
 
         # ----------- #
         
-        self.progress.jobProgress = self.MaxSize
+        self.on_virtual_job_exit(self.MaxSize)
 
     def extract(self, dest: Union[Path, str] = None, dumpPositions: bool = True):
-        self.progress.set_ready(False)
-        self.progress.jobProgress = 0
-
         jobSize = self.size + \
             (0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize))
         jobSize += self.dol.size
         jobSize += len(self._rawFST.getbuffer())
 
-        self.progress.jobSize = jobSize
-        self.progress.set_ready(True)
+        self.on_physical_job_start(jobSize)
 
         if dest is not None:
             self.root = Path(f"{dest}/root")
@@ -394,45 +447,41 @@ class GamecubeISO(ISOBase):
         with Path(systemPath, "boot.bin").open("wb") as f:
             self.bootheader.save(f)
 
-        self.progress.jobProgress += 0x440
+        self.on_physical_job_complete(0x440)
 
         with Path(systemPath, "bi2.bin").open("wb") as f:
             self.bootinfo.save(f)
 
-        self.progress.jobProgress += 0x2000
+        self.on_physical_job_complete(0x2000)
 
         with Path(systemPath, "apploader.img").open("wb") as f:
             self.apploader.save(f)
 
-        self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+        self.on_physical_job_complete(self.apploader.loaderSize + self.apploader.trailerSize)
 
         with Path(systemPath, "main.dol").open("wb") as f:
             self.dol.save(f)
 
-        self.progress.jobProgress += self.dol.size
+        self.on_physical_job_complete(self.dol.size)
 
         with Path(systemPath, "fst.bin").open("wb") as f:
             f.write(self._rawFST.getvalue())
 
-        self.progress.jobProgress += len(self._rawFST.getbuffer())
+        self.on_physical_job_complete(len(self._rawFST.getbuffer()))
 
         self.dataPath.mkdir(parents=True, exist_ok=True)
         self.extract_path("", self.dataPath.parent, dumpPositions)
 
         self.save_config()
-        self.progress.jobProgress = self.progress.jobSize
+        self.on_physical_job_exit(jobSize)
 
     def extract_system_data(self, dest: Union[Path, str] = None):
-        self.progress.set_ready(False)
-        self.progress.jobProgress = 0
-
         jobSize = 0x2440 + (self.apploader.loaderSize +
                             self.apploader.trailerSize)
         jobSize += self.dol.size
         jobSize += len(self._rawFST.getbuffer())
 
-        self.progress.jobSize = jobSize
-        self.progress.set_ready(True)
+        self.on_physical_job_start(jobSize)
 
         systemPath = dest / "sys"
         systemPath.mkdir(parents=True, exist_ok=True)
@@ -440,38 +489,34 @@ class GamecubeISO(ISOBase):
         with Path(systemPath, "boot.bin").open("wb") as f:
             self.bootheader.save(f)
 
-        self.progress.jobProgress += 0x440
+        self.on_physical_job_complete(0x440)
 
         with Path(systemPath, "bi2.bin").open("wb") as f:
             self.bootinfo.save(f)
 
-        self.progress.jobProgress += 0x2000
+        self.on_physical_job_complete(0x2000)
 
         with Path(systemPath, "apploader.img").open("wb") as f:
             self.apploader.save(f)
 
-        self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+        self.on_physical_job_complete(self.apploader.loaderSize + self.apploader.trailerSize)
 
         with Path(systemPath, "main.dol").open("wb") as f:
             self.dol.save(f)
 
-        self.progress.jobProgress += self.dol.size
+        self.on_physical_job_complete(self.dol.size)
 
         with Path(systemPath, "fst.bin").open("wb") as f:
             f.write(self._rawFST.getvalue())
 
-        self.progress.jobProgress += len(self._rawFST.getbuffer())
+        self.on_physical_job_exit(len(self._rawFST.getbuffer()))
 
     def save_system_data(self):
-        self.progress.set_ready(False)
-        self.progress.jobProgress = 0
-
         jobSize = 0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize)
         jobSize += self.dol.size
         jobSize += self.num_children()
 
-        self.progress.jobSize = jobSize
-        self.progress.set_ready(True)
+        self.on_physical_job_start(jobSize)
 
         systemPath = self.systemPath
 
@@ -479,17 +524,17 @@ class GamecubeISO(ISOBase):
             with Path(systemPath, "boot.bin").open("wb") as f:
                 self.bootheader.save(f)
 
-            self.progress.jobProgress += 0x440
+            self.on_physical_job_complete(0x440)
 
             with Path(systemPath, "bi2.bin").open("wb") as f:
                 self.bootinfo.save(f)
 
-            self.progress.jobProgress += 0x2000
+            self.on_physical_job_complete(0x2000)
 
             with Path(systemPath, "apploader.img").open("wb") as f:
                 self.apploader.save(f)
 
-            self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+            self.on_physical_job_complete(self.apploader.loaderSize + self.apploader.trailerSize)
 
             with Path(systemPath, "main.dol").open("wb") as f:
                 self.dol.save(f)
@@ -498,12 +543,12 @@ class GamecubeISO(ISOBase):
                 self.bootheader.save(f)
                 self.bootinfo.save(f)
 
-            self.progress.jobProgress += 0x2440
+            self.on_physical_job_complete(0x2440)
 
             with Path(systemPath, "Apploader.ldr").open("wb") as f:
                 self.apploader.save(f)
 
-            self.progress.jobProgress += self.apploader.loaderSize + self.apploader.trailerSize
+            self.on_physical_job_complete(self.apploader.loaderSize + self.apploader.trailerSize)
 
             with Path(systemPath, "Start.dol").open("wb") as f:
                 self.dol.save(f)
@@ -513,35 +558,32 @@ class GamecubeISO(ISOBase):
         if self.bnr:
             self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
 
-        self.progress.jobProgress += self.dol.size
+        self.on_physical_job_complete(self.dol.size)
         self._save_config_regen()
-        self.progress.jobProgress = self.progress.jobSize
+        self.on_physical_job_exit(jobSize)
 
     def save_system_datav(self):
-        self.progress.set_ready(False)
-        self.progress.jobProgress = 0
-
         jobSize = 0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize)
         jobSize += self.dol.size
 
-        self.progress.jobSize = jobSize
-        self.progress.set_ready(True)
+        self.on_virtual_job_start(jobSize)
         
         with self.isoPath.open("r+b") as f:
             self.bootheader.save(f)
-            self.progress.jobProgress += 0x440
+            self.on_virtual_job_complete(0x440)
             self.bootinfo.save(f)
-            self.progress.jobProgress += 0x2000
+            self.on_virtual_job_complete(0x2000)
             self.apploader.save(f)
+            self.on_virtual_job_complete(self.apploader.loaderSize + self.apploader.trailerSize)
             self.dol.save(f, self.bootheader.dolOffset)
-            self.progress.jobProgress += self.dol.size
+            self.on_virtual_job_complete(self.dol.size)
 
             bnrNode = self.find_by_path("opening.bnr")
             if bnrNode:
                 f.seek(bnrNode._fileoffset)
                 f.write(self.bnr._rawdata.getvalue())
 
-        self.progress.jobProgress = self.progress.jobSize
+        self.on_virtual_job_exit(jobSize)
 
     def get_auto_blob_size(self) -> int:
         _size = 0
@@ -663,20 +705,17 @@ class GamecubeISO(ISOBase):
         if isinstance(dest, str):
             dest = Path(dest)
 
-        self.progress.set_ready(False)
-
         node = self.find_by_path(path)
         if not node:
             return
 
-        self.progress.jobProgress = 0
-        self.progress.jobSize = node.datasize
-        self.progress.set_ready(True)
+        jobSize = node.datasize
+        self.on_physical_job_start(jobSize)
 
         with self.isoPath.open("rb") as _rawISO:
             self._recursive_extract(node, dest / node.name, _rawISO, dumpPositions)
 
-        self.progress.jobProgress = self.progress.jobSize
+        self.on_physical_job_exit(jobSize)
 
     def replace_path(self, path: str, new: Path):
         """
@@ -751,7 +790,7 @@ class GamecubeISO(ISOBase):
         self._load_from_path(path, parentnode, ignoreList)
         self.pre_calc_metadata((self.MaxSize - self.get_auto_blob_size()) & -self._get_greatest_alignment())
 
-    def load_file_systemv(self, fst):
+    def load_file_systemv(self, fst: BinaryIO):
         """
         Loads the file system data from a memory buffer into self for further use
 
@@ -774,6 +813,9 @@ class GamecubeISO(ISOBase):
             self.add_child(child)
 
     def load_config(self, path: Path):
+        if not path.is_file():
+            return
+
         with path.open("r") as f:
             data = json.load(f)
 
