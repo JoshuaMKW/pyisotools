@@ -15,12 +15,6 @@ def lint(path: str, threshold: float):
     results = Run(["pyisotools"], do_exit=False)
     score = results.linter.stats["global_note"]
 
-    if score < threshold or results.linter.msg_status != 0:
-        os.environ["PYLINT_COLOR"] = "red"
-        os.environ["PYLINT_VALUE"] = "failing"
-        raise CodeQualityError(
-            f"Code quality is too poor [{score} < {threshold}]")
-
     if score < 3:
         os.environ["PYLINT_COLOR"] = "red"
     elif score < 5:
@@ -30,6 +24,15 @@ def lint(path: str, threshold: float):
     else:
         os.environ["PYLINT_COLOR"] = "green"
         os.environ["PYLINT_VALUE"] = score
+
+    if score < threshold:
+        raise CodeQualityError(
+            f"Code quality is too poor [{score} < {threshold}]")
+    elif results.linter.msg_status != 0:
+        os.environ["PYLINT_COLOR"] = "red"
+        os.environ["PYLINT_VALUE"] = "failing"
+        raise CodeQualityError(
+            f"Code quality is too poor [{score} < {threshold}]")
 
 
 def main(args: Optional[Tuple[str]] = None):
