@@ -14,8 +14,8 @@ ignore=CVS
 
 # Add files or directories matching the regex patterns to the blacklist. The
 # regex matches against base names, not paths.
-ignore-patterns=**/gui/*window.py,
-                **/gui/icons_rc.py
+ignore-patterns=[a-zA-Z0-9_/]*/gui/[a-zA-Z0-9_]*window.py,
+                [a-zA-Z0-9_/]*/gui/icons_rc.py
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
