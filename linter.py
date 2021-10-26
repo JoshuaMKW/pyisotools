@@ -55,5 +55,4 @@ def main(args: Optional[Tuple[str]] = None):
     lint(path, threshold)
 
 
-if __name__ == "__main__":
-    main(sys.argv[1:])
+main(sys.argv[1:])
