@@ -29,7 +29,7 @@ def lint(path: str, threshold: float):
     if score < threshold:
         raise CodeQualityError(
             f"Code quality is too poor [{score} < {threshold}]")
-    elif results.linter.msg_status != 0:
+    elif results.linter.msg_status & 3:
         os.environ["PYLINT_COLOR"] = "red"
         os.environ["PYLINT_VALUE"] = "failing"
         raise CodeQualityError("Code is erroneous!")
