@@ -24,6 +24,7 @@ jobs:
       run: |
         python -m linter.py pyisotools 7.0
   badge:
+    needs: build
     if: always()
     runs-on: ubuntu-latest
     steps:
