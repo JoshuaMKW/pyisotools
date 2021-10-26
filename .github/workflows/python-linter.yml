@@ -33,6 +33,6 @@ jobs:
         auth: ${{ secrets.GIST_SECRET }}
         gistID: c0db8774048c6d42759903ca1b6a21e9
         filename: pylint.json
-        label: Pylint
+        label: pylint-score
         message: ${{ env.PYLINT_VALUE }}
         color: ${{ env.PYLINT_COLOR }}
