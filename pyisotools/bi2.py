@@ -45,7 +45,7 @@ class BI2(object):
     def debugFlag(self, flag: int):
         self._rawdata.seek(8)
         write_uint32(self._rawdata, flag)
-    
+
     @property
     def argumentOffset(self) -> int:
         self._rawdata.seek(12)
@@ -75,7 +75,7 @@ class BI2(object):
     def trackSize(self, size: int):
         self._rawdata.seek(20)
         write_uint32(self._rawdata, size)
-    
+
     @property
     def countryCode(self) -> int:
         self._rawdata.seek(24)

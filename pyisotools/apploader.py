@@ -54,4 +54,5 @@ class Apploader(object):
         write_uint32(self._rawdata, size)
 
     def save(self, _io):
-        _io.write(self._rawdata.getvalue()[:self.loaderSize + self.trailerSize + 0x20])
+        _io.write(self._rawdata.getvalue()[
+                  :self.loaderSize + self.trailerSize + 0x20])

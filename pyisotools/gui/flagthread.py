@@ -1,5 +1,7 @@
 from typing import Any, Callable, Tuple
+
 from PySide2.QtCore import QThread
+
 
 class FlagThread(QThread):
     def __init__(self, target: Callable, args: Tuple[Any] = tuple(), *_args, **_kwargs):

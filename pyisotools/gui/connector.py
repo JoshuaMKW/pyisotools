@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import functools
-from io import BytesIO
 import pickle
-from types import TracebackType
-from pyisotools.gui.mainwindow import Ui_MainWindow
 import subprocess
 import sys
 import threading
@@ -12,15 +9,17 @@ import time
 import traceback
 from enum import Enum, IntEnum
 from fnmatch import fnmatch
+from io import BytesIO
 from pathlib import Path
+from types import TracebackType
 from typing import Callable, Dict, Iterable, Tuple, Union
 
 from PIL import Image, ImageQt
+from pyisotools.gui.mainwindow import Ui_MainWindow
 from PySide2.QtCore import QEvent, Qt
 from PySide2.QtGui import QIcon
-from PySide2.QtWidgets import (QAction, QDialog, QFileDialog,
-                               QFrame, QMainWindow, QMenu,
-                               QMessageBox)
+from PySide2.QtWidgets import (QAction, QDialog, QFileDialog, QFrame,
+                               QMainWindow, QMenu, QMessageBox)
 
 from .. import __version__
 from ..bi2 import BI2
@@ -980,7 +979,7 @@ class Controller(QMainWindow):
                 f"0x{item.node.size:X}")
 
     @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, cb_: Callable[[Controller, Path, Tuple], None]=None, args=()) -> Tuple[bool, str]:
+    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, cb_: Callable[[Controller, Path, Tuple], None] = None, args=()) -> Tuple[bool, str]:
         if filter is None:
             filter = "Any folder"
 
@@ -1161,13 +1160,13 @@ class Controller(QMainWindow):
         controller.ui.operationProgressBar.setTextVisible(True)
         controller.ui.operationProgressBar.setMaximum(jobSize)
         controller.ui.operationProgressBar.setValue(0)
-    
+
     @staticmethod
     def _iso_complete_cb(progress: int) -> None:
         controller = Controller.get_instance()
         current = controller.ui.operationProgressBar.value()
         controller.ui.operationProgressBar.setValue(current + progress)
-    
+
     @staticmethod
     def _iso_exit_cb(completed: int) -> None:
         controller = Controller.get_instance()

@@ -1,16 +1,11 @@
-from logging import StreamHandler
-import re
-import sys
 import time
-
 import webbrowser
+from distutils.version import LooseVersion
+from logging import StreamHandler
+from typing import Iterable, List, Optional
 
 from github import Github
 from github.GitRelease import GitRelease
-
-from distutils.version import LooseVersion
-from typing import Iterable, List, Optional, Union
-
 from PySide2.QtCore import Signal
 
 try:

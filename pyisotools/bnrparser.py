@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-
 from argparse import ArgumentParser
 from functools import wraps
 from io import BytesIO
@@ -97,10 +96,11 @@ class BNR(RGB5A3):
     ImgTileHeight = ImageHeight // RGB5A1.TileHeight
 
     def __init__(self, f: Path, region: Regions = Regions.AMERICA, gameName: str = "", gameTitle: str = "", developerName: str = "", developerTitle: str = "", desc: str = "", overwrite=False):
-        self._rawdata = BytesIO(b"\x00" * (0x1960 if region != BNR.Regions.EUROPE else 0x1FA0))
+        self._rawdata = BytesIO(
+            b"\x00" * (0x1960 if region != BNR.Regions.EUROPE else 0x1FA0))
         self.regionID = region
         self.index = 0
-        
+
         self.load(f, region, gameName, gameTitle,
                   developerName, developerTitle, desc, overwrite)
 
@@ -185,7 +185,8 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x1820 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x20)
         self._rawdata.seek(0x1820 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(
+            bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
@@ -198,7 +199,8 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x1840 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x20)
         self._rawdata.seek(0x1840 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(
+            bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
@@ -211,7 +213,8 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x1860 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x40)
         self._rawdata.seek(0x1860 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(
+            bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
@@ -224,7 +227,8 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x18A0 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x40)
         self._rawdata.seek(0x18A0 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(
+            bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
 
     @property
     @io_preserve
@@ -237,7 +241,8 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x18E0 + (self.index * 0x140))
         self._rawdata.write(b"\x00" * 0x80)
         self._rawdata.seek(0x18E0 + (self.index * 0x140))
-        self._rawdata.write(bytes(name[:0x7F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+        self._rawdata.write(
+            bytes(name[:0x7F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
 
     def getImage(self) -> Image.Image:
         _image = self.rawImage
