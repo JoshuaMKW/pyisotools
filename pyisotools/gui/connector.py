@@ -857,21 +857,9 @@ class Controller(QMainWindow):
             return True, ""
         else:
             if self.is_from_iso():
-                isoProcess = FlagThread(
-                    target=self.iso.save_system_datav, parent=self)
+                self.iso.save_system_datav()
             else:
-                isoProcess = FlagThread(
-                    target=self.iso.save_system_data, parent=self)
-
-            progressBarProcess = ProgressHandler(self, isoProcess, self)
-
-            isoProcess.start()
-
-            while not self.iso.progress.is_ready() and isoProcess.is_alive():
-                pass
-
-            if isoProcess.is_alive():
-                progressBarProcess.run()
+                self.iso.save_system_data()
 
             dialog = JobCompleteDialog(self)
             if self.is_from_iso():
@@ -971,7 +959,7 @@ class Controller(QMainWindow):
                 extractAction = QAction(
                     f"Extract \"{item.text(0)}\" To...", self.ui.fileSystemTreeWidget)
                 extractAction.triggered.connect(lambda x=self, y=item.node: self.save_generic_to_folder(
-                    parent=x, callback=_extract_path_from_iso, args=(y,)))
+                    parent=x, cb_=_extract_path_from_iso, args=(y,)))
                 menu.addAction(extractAction)
 
         menu.exec_(self.ui.fileSystemTreeWidget.mapToGlobal(point))
@@ -992,7 +980,7 @@ class Controller(QMainWindow):
                 f"0x{item.node.size:X}")
 
     @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, callback=None, args=()) -> Tuple[bool, str]:
+    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, cb_: Callable[[Controller, Path, Tuple], None]=None, args=()) -> Tuple[bool, str]:
         if filter is None:
             filter = "Any folder"
 
@@ -1010,18 +998,8 @@ class Controller(QMainWindow):
 
         self.genericPath = Path(dialog.selectedFiles()[0])
 
-        if callback:
-            isoProcess = FlagThread(target=callback, args=(
-                self, self.genericPath, *args), parent=self)
-            progressBarProcess = ProgressHandler(self, isoProcess, self)
-
-            isoProcess.start()
-
-            while not self.iso.progress.is_ready() and isoProcess.is_alive():
-                pass
-
-            if isoProcess.is_alive():
-                progressBarProcess.run()
+        if cb_:
+            cb_(self, self.genericPath, *args)
 
             return True
         else:
