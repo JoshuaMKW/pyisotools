@@ -22,4 +22,4 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Quality checking the code with pylint
       run: |
-        python -m pylint pyisotools
+        python -m pylint --rcfile=.pylintrc pyisotools
