@@ -1,6 +1,7 @@
 import sys
 
 from pathlib import Path
+from typing import Optional, Tuple
 
 from PySide2.QtCore import QCoreApplication
 from PySide2.QtWidgets import QApplication
@@ -10,7 +11,11 @@ from pyisotools.gui.mainwindow import Ui_MainWindow
 from pyisotools.gui.connector import Controller
 from pyisotools.iso import GamecubeISO
 
-def main(argv: list = sys.argv[1:]):
+
+def main(argv: Optional[Tuple] = None):
+    if argv is None:
+        argv = sys.argv[1:]
+
     if len(argv) == 0:
         app = QApplication()
         central = Ui_MainWindow()
@@ -18,13 +23,15 @@ def main(argv: list = sys.argv[1:]):
         central.setupUi(mainWindow)
         mainWindow.load_program_config()
         mainWindow.update_theme(mainWindow.theme)
-        mainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", f"pyisotools v{__version__}", None))
+        mainWindow.setWindowTitle(QCoreApplication.translate(
+            "MainWindow", f"pyisotools v{__version__}", None))
         mainWindow.show()
         sys.exit(app.exec_())
     else:
         from argparse import ArgumentParser
-        
-        parser = ArgumentParser(f"pyisotools v{__version__}", description="ISO tool for extracting/building Gamecube ISOs", allow_abbrev=False)
+
+        parser = ArgumentParser(
+            f"pyisotools v{__version__}", description="ISO tool for extracting/building Gamecube ISOs", allow_abbrev=False)
 
         parser.add_argument("src", help="ISO/root to build/extract with")
         parser.add_argument("job",
@@ -47,6 +54,7 @@ def main(argv: list = sys.argv[1:]):
             iso.build(args.dest)
         else:
             parser.print_help()
+
 
 if __name__ == "__main__":
     main()

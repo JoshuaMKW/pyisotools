@@ -33,7 +33,7 @@ from .updatewindow import Ui_UpdateDialog
 from .workpathing import get_program_folder, resource_path
 
 
-class ProgramState(object):
+class ProgramState():
     _GLOBAL_STATE = [True, ""]
 
     @staticmethod
@@ -63,7 +63,7 @@ class ProgramState(object):
         ProgramState._GLOBAL_STATE = [True, ""]
 
 
-class ThreadManager(object):
+class ThreadManager():
     _THREAD_COLLECTION = {}
 
     @staticmethod
@@ -357,12 +357,12 @@ class Controller(QMainWindow):
             self._fromIso = True
 
             iso = GamecubeISO.from_iso(self.rootPath)
-            iso.on_physical_job_start = self._iso_start_cb
-            iso.on_physical_job_complete = self._iso_complete_cb
-            iso.on_physical_job_exit = self._iso_exit_cb
-            iso.on_virtual_job_start = self._iso_start_cb
-            iso.on_virtual_job_complete = self._iso_complete_cb
-            iso.on_virtual_job_exit = self._iso_exit_cb
+            iso.onPhysicalJobStart = self._iso_start_callback
+            iso.onPhysicalJobComplete = self._iso_complete_callback
+            iso.onPhysicalJobExit = self._iso_exit_callback
+            iso.onVirtualJobStart = self._iso_start_callback
+            iso.onVirtualJobComplete = self._iso_complete_callback
+            iso.onVirtualJobExit = self._iso_exit_callback
             self.iso = iso
 
             self.ui.actionClose.setEnabled(True)
@@ -401,12 +401,12 @@ class Controller(QMainWindow):
             self._fromIso = False
 
             iso = GamecubeISO.from_root(self.rootPath, True)
-            iso.on_physical_job_start = self._iso_start_cb
-            iso.on_physical_job_complete = self._iso_complete_cb
-            iso.on_physical_job_exit = self._iso_exit_cb
-            iso.on_virtual_job_start = self._iso_start_cb
-            iso.on_virtual_job_complete = self._iso_complete_cb
-            iso.on_virtual_job_exit = self._iso_exit_cb
+            iso.onPhysicalJobStart = self._iso_start_callback
+            iso.onPhysicalJobComplete = self._iso_complete_callback
+            iso.onPhysicalJobExit = self._iso_exit_callback
+            iso.onVirtualJobStart = self._iso_start_callback
+            iso.onVirtualJobComplete = self._iso_complete_callback
+            iso.onVirtualJobExit = self._iso_exit_callback
             self.iso = iso
 
             self.bnrMap = self.iso.bnr
@@ -606,7 +606,7 @@ class Controller(QMainWindow):
 
         bnr = self.bnrMap[curBnrName]
 
-        pixmap = ImageQt.toqpixmap(bnr.getImage())
+        pixmap = ImageQt.toqpixmap(bnr.get_image())
         pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
         ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
         self.ui.bannerImageView.setPixmap(pixmap)
@@ -958,7 +958,7 @@ class Controller(QMainWindow):
                 extractAction = QAction(
                     f"Extract \"{item.text(0)}\" To...", self.ui.fileSystemTreeWidget)
                 extractAction.triggered.connect(lambda x=self, y=item.node: self.save_generic_to_folder(
-                    parent=x, cb_=_extract_path_from_iso, args=(y,)))
+                    parent=x, callback=_extract_path_from_iso, args=(y,)))
                 menu.addAction(extractAction)
 
         menu.exec_(self.ui.fileSystemTreeWidget.mapToGlobal(point))
@@ -979,7 +979,7 @@ class Controller(QMainWindow):
                 f"0x{item.node.size:X}")
 
     @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
-    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, cb_: Callable[[Controller, Path, Tuple], None] = None, args=()) -> Tuple[bool, str]:
+    def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, callback: Callable[[Controller, Path, Tuple], None] = None, args=()) -> Tuple[bool, str]:
         if filter is None:
             filter = "Any folder"
 
@@ -997,8 +997,8 @@ class Controller(QMainWindow):
 
         self.genericPath = Path(dialog.selectedFiles()[0])
 
-        if cb_:
-            cb_(self, self.genericPath, *args)
+        if callback:
+            callback(self, self.genericPath, *args)
 
             return True
         else:
@@ -1155,20 +1155,20 @@ class Controller(QMainWindow):
             parent.addChild(treeNode)
 
     @staticmethod
-    def _iso_start_cb(jobSize: int) -> None:
+    def _iso_start_callback(jobSize: int) -> None:
         controller = Controller.get_instance()
         controller.ui.operationProgressBar.setTextVisible(True)
         controller.ui.operationProgressBar.setMaximum(jobSize)
         controller.ui.operationProgressBar.setValue(0)
 
     @staticmethod
-    def _iso_complete_cb(progress: int) -> None:
+    def _iso_complete_callback(progress: int) -> None:
         controller = Controller.get_instance()
         current = controller.ui.operationProgressBar.value()
         controller.ui.operationProgressBar.setValue(current + progress)
 
     @staticmethod
-    def _iso_exit_cb(completed: int) -> None:
+    def _iso_exit_callback(completed: int) -> None:
         controller = Controller.get_instance()
         controller.ui.operationProgressBar.setValue(completed)
 

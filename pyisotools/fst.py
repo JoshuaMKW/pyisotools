@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 
 class FileAccessOnFolderError(Exception):
@@ -21,7 +21,7 @@ class InvalidFSTError(Exception):
     ...
 
 
-class FSTNode(object):
+class FSTNode():
 
     FILE = 0
     FOLDER = 1
@@ -184,8 +184,7 @@ class FSTNode(object):
     def size(self) -> int:
         if self.is_file():
             return self._filesize
-        else:
-            return self.num_children()
+        return self.num_children()
 
     @size.setter
     def size(self, size: int):
@@ -196,15 +195,15 @@ class FSTNode(object):
     def datasize(self) -> int:
         if self.is_file():
             return self._filesize
-        else:
-            size = sum((node.size for node in self.rfiles(includedOnly=True)))
-            return size
+
+        size = sum((node.size for node in self.rfiles(includedOnly=True)))
+        return size
 
     def find_by_path(self, path: Union[Path, str], skipExcluded: bool = True) -> FSTNode:
         _path = str(path).lower()
         doGlob = "?" in _path or "*" in _path
 
-        if _path == "" or _path == ".":
+        if _path in {"", "."}:
             return self.rootnode
 
         for node in self.rfiles(includedOnly=skipExcluded):
@@ -221,6 +220,8 @@ class FSTNode(object):
             else:
                 if node.path.lower() == _path:
                     return node
+
+        return None
 
     def add_child(self, node: FSTNode):
         self._children[node.name] = node
@@ -245,7 +246,7 @@ class FSTNode(object):
         return self.type == FSTNode.FILE
 
     def is_root(self) -> bool:
-        return self.type == FSTNode.FOLDER and self.name == "files" and self.parent == None
+        return self.type == FSTNode.FOLDER and self.name == "files" and self.parent is None
 
     def __eq__(self, other: FSTNode) -> bool:
         return self.name == other.name and self.type == other.type
@@ -256,8 +257,7 @@ class FSTNode(object):
     def __len__(self) -> int:
         if self.is_file():
             return self._filesize
-        else:
-            return self.num_children() + 1
+        return self.num_children() + 1
 
     def __bool__(self) -> bool:
         return True
@@ -268,11 +268,7 @@ class FSTNode(object):
                 if child == other:
                     return True
             return False
-        else:
-            if self.find_by_path(other):
-                return True
-            else:
-                return False
+        return bool(self.find_by_path(other))
 
 
 class FSTRoot(FSTNode):
@@ -287,7 +283,8 @@ class FSTRoot(FSTNode):
         for node in sorted(self.rfiles(), key=lambda x: x._fileoffset, reverse=reverse):
             yield node
 
-    def _detect_alignment(self, node: FSTNode, prev: FSTNode = None) -> int:
+    @staticmethod
+    def _detect_alignment(node: FSTNode, prev: Optional[FSTNode] = None) -> int:
         if prev:
             offset = node._fileoffset - (prev._fileoffset + prev.size)
         else:
@@ -310,11 +307,8 @@ class FSTRoot(FSTNode):
             if (offset & mask) == 0:
                 if mask + 1 <= alignment:
                     alignment = mask + 1
-                    found = True
-                    break
-                else:
-                    found = True
-                    break
+                found = True
+                break
             mask >>= 1
 
         if not found:
@@ -324,14 +318,11 @@ class FSTRoot(FSTNode):
 
 class FST(FSTRoot):
 
-    def __init__(self):
-        super().__init__()
-
     @property
     def strTableOfs(self) -> int:
         return len(self) * 0xC
 
-    def print_info(self, fst=None):
+    def print_info(self):
         def print_tree(node: FSTNode, string: str, depth: int) -> str:
             if node.is_file():
                 string += "  "*depth + node.name + "\n"

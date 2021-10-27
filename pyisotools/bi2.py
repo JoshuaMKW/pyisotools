@@ -5,7 +5,7 @@ from io import BytesIO
 from pyisotools.iohelper import read_uint32, write_uint32
 
 
-class BI2(object):
+class BI2():
 
     class Country:
         JAPAN = 0

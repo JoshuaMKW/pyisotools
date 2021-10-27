@@ -15,7 +15,7 @@ from PySide2.QtGui import QFont
 from PySide2.QtWidgets import *
 
 
-class Ui_UpdateDialog(object):
+class Ui_UpdateDialog():
     def setupUi(self, Dialog):
         if Dialog.objectName():
             Dialog.setObjectName(u"Dialog")

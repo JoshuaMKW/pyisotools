@@ -16,7 +16,7 @@ except ImportError:
     from pyisotools.gui.flagthread import FlagThread
 
 
-class ReleaseManager(object):
+class ReleaseManager():
     def __init__(self, owner: str, repository: StreamHandler):
         self._owner = owner
         self._repo = repository

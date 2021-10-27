@@ -5,7 +5,7 @@ from io import BytesIO
 from pyisotools.iohelper import read_string, read_uint32, write_uint32
 
 
-class Apploader(object):
+class Apploader():
 
     def __init__(self, f):
         f.seek(0x14, 1)

@@ -17,7 +17,7 @@ from PySide2.QtWidgets import *
 from . import icons_rc
 from .customwidgets import FilteredPlainTextEdit
 
-class Ui_MainWindow(object):
+class Ui_MainWindow():
     def setupUi(self, MainWindow):
         if MainWindow.objectName():
             MainWindow.setObjectName(u"MainWindow")

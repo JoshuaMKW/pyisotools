@@ -27,7 +27,7 @@ class Jobs:
     EXTRACT = "EXTRACT"
 
 
-class RGB5A1(object):
+class RGB5A1():
 
     TileWidth = 4
     TileHeight = 4
@@ -35,25 +35,25 @@ class RGB5A1(object):
     @staticmethod
     def encode_pixel(pixel: tuple) -> int:
         """ RGB888 or RGBA8888 ONLY """
-        r = (pixel[0] >> 3) & 0b11111
-        g = (pixel[1] >> 3) & 0b11111
-        b = (pixel[2] >> 3) & 0b11111
-        a = 1
+        red = (pixel[0] >> 3) & 0b11111
+        green = (pixel[1] >> 3) & 0b11111
+        blue = (pixel[2] >> 3) & 0b11111
+        alpha = 1
 
-        return (a << 15) | (r << 10) | (g << 5) | b
+        return (alpha << 15) | (red << 10) | (green << 5) | blue
 
     @staticmethod
     def decode_pixel(pixel: int) -> tuple:
         """ RGBA8888 ONLY """
-        r = ((pixel >> 10) & 0b11111) << 3
-        g = ((pixel >> 5) & 0b11111) << 3
-        b = (pixel & 0b11111) << 3
-        a = 0xFF
+        red = ((pixel >> 10) & 0b11111) << 3
+        green = ((pixel >> 5) & 0b11111) << 3
+        blue = (pixel & 0b11111) << 3
+        alpha = 0xFF
 
-        return (r, g, b, a)
+        return (red, green, blue, alpha)
 
 
-class RGB5A3(object):
+class RGB5A3():
 
     TileWidth = 4
     TileHeight = 4
@@ -61,25 +61,25 @@ class RGB5A3(object):
     @staticmethod
     def encode_pixel(pixel: tuple) -> int:
         """ RGB888 or RGBA8888 ONLY """
-        r = (pixel[0] >> 4) & 0b1111
-        g = (pixel[1] >> 4) & 0b1111
-        b = (pixel[2] >> 4) & 0b1111
+        red = (pixel[0] >> 4) & 0b1111
+        green = (pixel[1] >> 4) & 0b1111
+        blue = (pixel[2] >> 4) & 0b1111
         if len(pixel) == 3:
-            a = 0b111
+            alpha = 0b111
         else:
-            a = (pixel[3] >> 5) & 0b111
+            alpha = (pixel[3] >> 5) & 0b111
 
-        return (a << 12) | (r << 8) | (g << 4) | b
+        return (alpha << 12) | (red << 8) | (green << 4) | blue
 
     @staticmethod
     def decode_pixel(pixel: int) -> tuple:
         """ RGBA8888 ONLY """
-        r = ((pixel >> 8) & 0b1111) << 4
-        g = ((pixel >> 4) & 0b1111) << 4
-        b = (pixel & 0b1111) << 4
-        a = ((pixel >> 12) & 0b111) << 5
+        red = ((pixel >> 8) & 0b1111) << 4
+        green = ((pixel >> 4) & 0b1111) << 4
+        blue = (pixel & 0b1111) << 4
+        alpha = ((pixel >> 12) & 0b111) << 5
 
-        return (r, g, b, a)
+        return (red, green, blue, alpha)
 
 
 class BNR(RGB5A3):
@@ -95,7 +95,17 @@ class BNR(RGB5A3):
     ImgTileWidth = ImageWidth // RGB5A1.TileWidth
     ImgTileHeight = ImageHeight // RGB5A1.TileHeight
 
-    def __init__(self, f: Path, region: Regions = Regions.AMERICA, gameName: str = "", gameTitle: str = "", developerName: str = "", developerTitle: str = "", desc: str = "", overwrite=False):
+    def __init__(
+        self,
+        f: Path,
+        region: Regions = Regions.AMERICA,
+        gameName: str = "",
+        gameTitle: str = "",
+        developerName: str = "",
+        developerTitle: str = "",
+        desc: str = "",
+        overwrite=False
+    ):
         self._rawdata = BytesIO(
             b"\x00" * (0x1960 if region != BNR.Regions.EUROPE else 0x1FA0))
         self.regionID = region
@@ -120,12 +130,11 @@ class BNR(RGB5A3):
     def region(self) -> str:
         if self.regionID == BNR.Regions.AMERICA:
             return "NTSC-U"
-        elif self.regionID == BNR.Regions.EUROPE:
+        if self.regionID == BNR.Regions.EUROPE:
             return "PAL"
-        elif self.regionID == BNR.Regions.JAPAN:
+        if self.regionID == BNR.Regions.JAPAN:
             return "NTSC-J"
-        else:
-            return "NTSC-K"
+        return "NTSC-K"
 
     @property
     @io_preserve
@@ -158,21 +167,23 @@ class BNR(RGB5A3):
         self._rawdata.seek(0x20)
         if isinstance(_img, bytes):
             self._rawdata.write(_img[:0x1800])
-        elif isinstance(_img, BytesIO):
+            return
+        if isinstance(_img, BytesIO):
             self._rawdata.write(_img.getvalue()[:0x1800])
-        elif isinstance(_img, Image.Image):
-            smallImg = _img.resize((BNR.ImageWidth, BNR.ImageHeight))
-            for yBlock in range(BNR.ImgTileHeight):
-                for xBlock in range(BNR.ImgTileWidth):
-                    for iy in range(BNR.TileHeight):
-                        for ix in range(BNR.TileWidth):
-                            x = xBlock*BNR.TileWidth + ix
-                            y = yBlock*BNR.TileHeight + iy
+            return
 
-                            pixel = smallImg.getpixel((x, y))
-                            if x < BNR.ImageWidth and y < BNR.ImageHeight:
-                                self._rawdata.write(self._encode_pixel(
-                                    pixel).to_bytes(2, "big", signed=False))
+        smallImg = _img.resize((BNR.ImageWidth, BNR.ImageHeight))
+        for blockRow in range(BNR.ImgTileHeight):
+            for blockColumn in range(BNR.ImgTileWidth):
+                for tileRow in range(BNR.TileHeight):
+                    for tileColumn in range(BNR.TileWidth):
+                        column = blockColumn*BNR.TileWidth + tileRow
+                        row = blockRow*BNR.TileHeight + tileColumn
+
+                        pixel = smallImg.getpixel((column, row))
+                        if column < BNR.ImageWidth and row < BNR.ImageHeight:
+                            self._rawdata.write(self._encode_pixel(
+                                pixel).to_bytes(2, "big", signed=False))
 
     @property
     @io_preserve
@@ -244,21 +255,22 @@ class BNR(RGB5A3):
         self._rawdata.write(
             bytes(name[:0x7F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
 
-    def getImage(self) -> Image.Image:
+    def get_image(self) -> Image.Image:
         _image = self.rawImage
         img = Image.new("RGBA", (BNR.ImageWidth, BNR.ImageHeight))
 
-        for yBlock in range(BNR.ImgTileHeight):
-            for xBlock in range(BNR.ImgTileWidth):
-                for iy in range(BNR.TileHeight):
-                    for ix in range(BNR.TileWidth):
-                        x = xBlock*BNR.TileWidth + ix
-                        y = yBlock*BNR.TileHeight + iy
+        for blockRow in range(BNR.ImgTileHeight):
+            for blockColumn in range(BNR.ImgTileWidth):
+                for tileRow in range(BNR.TileHeight):
+                    for tileColumn in range(BNR.TileWidth):
+                        column = blockColumn*BNR.TileWidth + tileRow
+                        row = blockRow*BNR.TileHeight + tileColumn
 
                         pixel = int.from_bytes(
                             _image.read(2), "big", signed=False)
-                        if x < BNR.ImageWidth and y < BNR.ImageHeight:
-                            img.putpixel((x, y), self._decode_pixel(pixel))
+                        if column < BNR.ImageWidth and row < BNR.ImageHeight:
+                            img.putpixel(
+                                (column, row), self._decode_pixel(pixel))
 
         return img
 
@@ -266,7 +278,7 @@ class BNR(RGB5A3):
         dest.write_bytes(self._rawdata.getvalue())
 
     def save_png(self, dest: Path):
-        img = self.getImage()
+        img = self.get_image()
         img.save(str(dest))
 
         f = dest.parent / (dest.stem + ".json")
@@ -281,7 +293,17 @@ class BNR(RGB5A3):
         with f.open("w") as jsonFile:
             json.dump(info, jsonFile, indent=4)
 
-    def load(self, f: Path, region: Regions = Regions.AMERICA, gameName: str = "", gameTitle: str = "", developerName: str = "", developerTitle: str = "", desc: str = "", overwrite: bool = False):
+    def load(
+        self,
+        f: Path,
+        region: Regions = Regions.AMERICA,
+        gameName: str = "",
+        gameTitle: str = "",
+        developerName: str = "",
+        developerTitle: str = "",
+        desc: str = "",
+        overwrite=False
+    ):
         self.regionID = region
         if f.suffix == ".bnr":
             self._rawdata = BytesIO(f.read_bytes())
@@ -319,15 +341,13 @@ class BNR(RGB5A3):
     def _encode_pixel(pixel: tuple):
         if len(pixel) == 3:
             return RGB5A1.encode_pixel(pixel)
-        else:
-            return RGB5A3.encode_pixel(pixel)
+        return RGB5A3.encode_pixel(pixel)
 
     @staticmethod
     def _decode_pixel(pixel: int):
         if (pixel >> 15) & 1:
             return RGB5A1.decode_pixel(pixel)
-        else:
-            return RGB5A3.decode_pixel(pixel)
+        return RGB5A3.decode_pixel(pixel)
 
 
 if __name__ == "__main__":
@@ -371,18 +391,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.region == "E":
-        region = BNR.Regions.AMERICA
+        REGION = BNR.Regions.AMERICA
     elif args.region == "P":
-        region = BNR.Regions.EUROPE
+        REGION = BNR.Regions.EUROPE
     elif args.region == "J":
-        region = BNR.Regions.JAPAN
+        REGION = BNR.Regions.JAPAN
     else:
         raise NotImplementedError(
             f"Unknown region type {args.region} provided")
 
     if args.job == Jobs.COMPILE:
         bnr = BNR(Path(args.img).resolve(),
-                  region=region,
+                  region=REGION,
                   gameName=args.gamename,
                   gameTitle=args.gametitle,
                   developerName=args.devname,

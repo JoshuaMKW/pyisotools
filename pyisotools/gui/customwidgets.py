@@ -134,7 +134,7 @@ class FSTTreeItem(QTreeWidgetItem):
 
     @property
     def position(self) -> int:
-        self.node._fileoffset
+        return self.node._fileoffset
 
     @position.setter
     def position(self, pos: int):
@@ -152,11 +152,10 @@ class FSTTreeItem(QTreeWidgetItem):
         """ Used for tree sorting """
         if self.node.is_root() and not other.node.is_root():
             return True
-        elif self.node.is_dir() and other.node.is_file():
+        if self.node.is_dir() and other.node.is_file():
             return True
-        elif self.node.is_file() and other.node.is_dir():
+        if self.node.is_file() and other.node.is_dir():
             return False
-        else:
-            return self.node._id < other.node._id
+        return self.node._id < other.node._id
 
 # pylint: enable=invalid-name

@@ -6,7 +6,7 @@ from pyisotools.iohelper import (read_string, read_ubyte, read_uint32,
                                  write_ubyte, write_uint32)
 
 
-class Boot(object):
+class Boot():
 
     class Country:
         JAPAN = 0
@@ -67,7 +67,7 @@ class Boot(object):
     @property
     def audioStreaming(self) -> bool:
         self._rawdata.seek(8)
-        return True if self._rawdata.read(1) == b"\x01" else False
+        return bool(self._rawdata.read(1))
 
     @audioStreaming.setter
     def audioStreaming(self, active: bool):
@@ -89,10 +89,9 @@ class Boot(object):
         self._rawdata.seek(24)
         if read_uint32(self._rawdata) == Boot.Magic.WIIMAGIC:
             return Boot.Type.WII
-        elif read_uint32(self._rawdata) == Boot.Magic.GCNMAGIC:
+        if read_uint32(self._rawdata) == Boot.Magic.GCNMAGIC:
             return Boot.Type.GCN
-        else:
-            return Boot.Type.UNKNOWN
+        return Boot.Type.UNKNOWN
 
     @gameType.setter
     def gameType(self, _type: Boot.Type):

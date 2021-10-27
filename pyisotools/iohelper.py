@@ -72,21 +72,28 @@ def read_bool(f: BinaryIO, vSize=1):
     return struct.unpack("B", f.read(vSize))[0] > 0
 
 
-def write_bool(f: BinaryIO, val, vSize=1):
-    f.write(b'\x00'*(vSize-1) +
-            b'\x01') if val is True else f.write(b'\x00' * vSize)
+def write_bool(f: BinaryIO, val: bool, vSize=1):
+    if val is True:
+        f.write(b'\x00'*(vSize-1) + b'\x01')
+    else:
+        f.write(b'\x00' * vSize)
 
 
-def read_string(io: BinaryIO, offset: int = 0, maxlen: int = 0, encoding: Optional[str] = None) -> str:
+def read_string(
+    f: BinaryIO,
+    offset: int = 0,
+    maxlen: int = 0,
+    encoding: Optional[str] = None
+) -> str:
     """ Reads a null terminated string from the specified address """
-    io.seek(offset)
+    f.seek(offset)
 
     length = 0
-    binary: bytes = io.read(1)
+    binary: bytes = f.read(1)
     while binary[-1]:
         if length >= maxlen > 0:
             break
-        binary += io.read(1)
+        binary += f.read(1)
         length += 1
 
     binary = binary[:-1]

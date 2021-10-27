@@ -17,7 +17,7 @@ from PySide2.QtWidgets import *
 from .customwidgets import FilteredPlainTextEdit
 
 
-class Ui_NodeFieldWindow(object):
+class Ui_NodeFieldWindow():
     def setupUi(self, Dialog):
         if Dialog.objectName():
             Dialog.setObjectName(u"Dialog")
