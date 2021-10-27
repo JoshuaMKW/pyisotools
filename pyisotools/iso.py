@@ -46,13 +46,15 @@ class ISOBase(_ISOInfo):
         super().__init__()
 
         # File extraction callbacks
-        self._onPhysicalJobStart: Callable[[int], None] = None
-        self._onPhysicalJobComplete: Callable[[int], None] = None
+        self._onPhysicalJobEnter: Callable[[int], None] = None
+        self._onPhysicalTaskDescribe: Callable[[str], None] = None
+        self._onPhysicalTaskComplete: Callable[[int], None] = None
         self._onPhysicalJobExit: Callable[[int], None] = None
 
         # ISO build callbacks
-        self._onVirtualJobStart: Callable[[int], None] = None
-        self._onVirtualJobComplete: Callable[[int], None] = None
+        self._onVirtualJobEnter: Callable[[int], None] = None
+        self._onVirtualTaskDescribe: Callable[[str], None] = None
+        self._onVirtualTaskComplete: Callable[[int], None] = None
         self._onVirtualJobExit: Callable[[int], None] = None
 
         self.isoPath = None
@@ -73,24 +75,34 @@ class ISOBase(_ISOInfo):
     # pylint: enable=unused-argument
 
     @property
-    def onPhysicalJobStart(self) -> Callable[[int], None]:
-        if self._onPhysicalJobStart:
-            return self._onPhysicalJobStart
+    def onPhysicalJobEnter(self) -> Callable[[int], None]:
+        if self._onPhysicalJobEnter:
+            return self._onPhysicalJobEnter
         return self.__default_callback
 
-    @onPhysicalJobStart.setter
-    def onPhysicalJobStart(self, callback: Callable[[int], None]):
-        self._onPhysicalJobStart = callback
+    @onPhysicalJobEnter.setter
+    def onPhysicalJobEnter(self, callback: Callable[[int], None]):
+        self._onPhysicalJobEnter = callback
 
     @property
-    def onPhysicalJobComplete(self) -> Callable[[int], None]:
-        if self._onPhysicalJobComplete:
-            return self._onPhysicalJobComplete
+    def onPhysicalTaskDescribe(self) -> Callable[[str], None]:
+        if self._onPhysicalTaskDescribe:
+            return self._onPhysicalTaskDescribe
         return self.__default_callback
 
-    @onPhysicalJobComplete.setter
-    def onPhysicalJobComplete(self, callback: Callable[[int], None]):
-        self._onPhysicalJobComplete = callback
+    @onPhysicalTaskDescribe.setter
+    def onPhysicalTaskDescribe(self, callback: Callable[[str], None]):
+        self._onPhysicalTaskDescribe = callback
+
+    @property
+    def onPhysicalTaskComplete(self) -> Callable[[int], None]:
+        if self._onPhysicalTaskComplete:
+            return self._onPhysicalTaskComplete
+        return self.__default_callback
+
+    @onPhysicalTaskComplete.setter
+    def onPhysicalTaskComplete(self, callback: Callable[[int], None]):
+        self._onPhysicalTaskComplete = callback
 
     @property
     def onPhysicalJobExit(self) -> Callable[[int], None]:
@@ -103,24 +115,34 @@ class ISOBase(_ISOInfo):
         self._onPhysicalJobExit = callback
 
     @property
-    def onVirtualJobStart(self) -> Callable[[int], None]:
-        if self._onVirtualJobStart:
-            return self._onVirtualJobStart
+    def onVirtualJobEnter(self) -> Callable[[int], None]:
+        if self._onVirtualJobEnter:
+            return self._onVirtualJobEnter
         return self.__default_callback
 
-    @onVirtualJobStart.setter
-    def onVirtualJobStart(self, callback: Callable[[int], None]):
-        self._onVirtualJobStart = callback
+    @onVirtualJobEnter.setter
+    def onVirtualJobEnter(self, callback: Callable[[int], None]):
+        self._onVirtualJobEnter = callback
 
     @property
-    def onVirtualJobComplete(self) -> Callable[[int], None]:
-        if self._onVirtualJobComplete:
-            return self._onVirtualJobComplete
+    def onVirtualTaskDescribe(self) -> Callable[[str], None]:
+        if self._onVirtualTaskDescribe:
+            return self._onVirtualTaskDescribe
         return self.__default_callback
 
-    @onVirtualJobComplete.setter
-    def onVirtualJobComplete(self, callback: Callable[[int], None]):
-        self._onVirtualJobComplete = callback
+    @onVirtualTaskDescribe.setter
+    def onVirtualTaskDescribe(self, callback: Callable[[str], None]):
+        self._onVirtualTaskDescribe = callback
+
+    @property
+    def onVirtualTaskComplete(self) -> Callable[[int], None]:
+        if self._onVirtualTaskComplete:
+            return self._onVirtualTaskComplete
+        return self.__default_callback
+
+    @onVirtualTaskComplete.setter
+    def onVirtualTaskComplete(self, callback: Callable[[int], None]):
+        self._onVirtualTaskComplete = callback
 
     @property
     def onVirtualJobExit(self) -> Callable[[int], None]:
@@ -178,14 +200,16 @@ class ISOBase(_ISOInfo):
             self._excludeTable = SortedList(data["exclude"])
 
     def _recursive_extract(self, node: FSTNode, dest: Path, iso: BinaryIO, dumpPositions: bool = False):
+        self.onPhysicalTaskDescribe(node.path)
         if node.is_file():
             iso.seek(node._fileoffset)
             dest.write_bytes(iso.read(node.size))
-            self.onPhysicalJobComplete(node.size)
+            self.onPhysicalTaskComplete(node.size)
         else:
             dest.mkdir(parents=True, exist_ok=True)
             for child in node.children:
                 self._recursive_extract(child, dest/child.name, iso)
+            self.onPhysicalTaskComplete(0)
 
         if dumpPositions:
             self._locationTable[node.path] = node._fileoffset
@@ -322,7 +346,7 @@ class GamecubeISO(ISOBase):
         return False
 
     def build(self, dest: Union[Path, str] = None, preCalc: bool = True):
-        self.onVirtualJobStart(self.MaxSize)
+        self.onVirtualJobEnter(self.MaxSize)
 
         if dest is not None:
             fmtpath = str(dest).replace(
@@ -404,31 +428,31 @@ class GamecubeISO(ISOBase):
 
         with self.isoPath.open("wb") as f:
             self.bootheader.save(f)
-            self.onVirtualJobComplete(0x440)
+            self.onVirtualTaskComplete(0x440)
 
             self.bootinfo.save(f)
-            self.onVirtualJobComplete(0x2000)
+            self.onVirtualTaskComplete(0x2000)
 
             self.apploader.save(f)
-            self.onVirtualJobComplete(
+            self.onVirtualTaskComplete(
                 self.apploader.loaderSize + self.apploader.trailerSize)
 
             f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
             self.dol.save(f, self.bootheader.dolOffset)
-            self.onVirtualJobComplete(self.dol.size)
+            self.onVirtualTaskComplete(self.dol.size)
 
             f.seek(f.tell() + self.dol.size)
             f.write(b"\x00" * (self.bootheader.fstOffset - f.tell()))
 
             f.write(self._rawFST.getvalue())
-            self.onVirtualJobComplete(len(self._rawFST.getbuffer()))
+            self.onVirtualTaskComplete(len(self._rawFST.getbuffer()))
 
             for child in self.rfiles(includedOnly=True):
                 f.write(b"\x00" * (child._fileoffset - f.tell()))
                 f.seek(child._fileoffset)
                 f.write((self.dataPath / child.path).read_bytes())
                 f.seek(0, 2)
-                self.onVirtualJobComplete(child.size)
+                self.onVirtualTaskComplete(child.size)
 
             f.write(b"\x00" * (self.MaxSize - f.tell()))
 
@@ -436,168 +460,177 @@ class GamecubeISO(ISOBase):
 
         self.onVirtualJobExit(self.MaxSize)
 
-    def extract(self, dest: Union[Path, str] = None, dumpPositions: bool = True):
-        jobSize = self.size + \
-            (0x2440 + (self.apploader.loaderSize + self.apploader.trailerSize))
-        jobSize += self.dol.size
-        jobSize += len(self._rawFST.getbuffer())
+    def extract(self, dest: Optional[Union[Path, str]] = None, dumpPositions: bool = True):
+        """
+        Extracts the entire contents of this virtual filesystem (ISO) to a path described by `dest`
 
-        self.onPhysicalJobStart(jobSize)
+        `dest`: Where to extract the root filesystem to. If None it will be the default root path
+        `dumpPositions`: If true, the position of every file will be dumped into the `.config.json`
+        """
+        jobSize = self.datasize + self._get_sys_size()
+        self.onPhysicalJobEnter(jobSize)
 
         if dest is not None:
             self.root = Path(f"{dest}/root")
 
+        # Create `root` and `files` folders
         self.root.mkdir(parents=True, exist_ok=True)
-        systemPath = self.systemPath
-        systemPath.mkdir(exist_ok=True)
-
-        with Path(systemPath, "boot.bin").open("wb") as f:
-            self.bootheader.save(f)
-
-        self.onPhysicalJobComplete(0x440)
-
-        with Path(systemPath, "bi2.bin").open("wb") as f:
-            self.bootinfo.save(f)
-
-        self.onPhysicalJobComplete(0x2000)
-
-        with Path(systemPath, "apploader.img").open("wb") as f:
-            self.apploader.save(f)
-
-        self.onPhysicalJobComplete(
-            self.apploader.loaderSize + self.apploader.trailerSize)
-
-        with Path(systemPath, "main.dol").open("wb") as f:
-            self.dol.save(f)
-
-        self.onPhysicalJobComplete(self.dol.size)
-
-        with Path(systemPath, "fst.bin").open("wb") as f:
-            f.write(self._rawFST.getvalue())
-
-        self.onPhysicalJobComplete(len(self._rawFST.getbuffer()))
-
         self.dataPath.mkdir(parents=True, exist_ok=True)
-        self.extract_path("", self.dataPath.parent, dumpPositions)
 
+        self.extract_system_data(self.systemPath, blockEnterExitSignals=True)
+        self.extract_path("", self.dataPath.parent,
+                          dumpPositions, blockEnterExitSignals=True)
         self.save_config()
+
         self.onPhysicalJobExit(jobSize)
 
-    def extract_system_data(self, dest: Union[Path, str] = None):
-        jobSize = 0x2440 + (self.apploader.loaderSize +
-                            self.apploader.trailerSize)
-        jobSize += self.dol.size
-        jobSize += len(self._rawFST.getbuffer())
+    def extract_system_data(self, dest: Union[Path, str], blockEnterExitSignals: bool = False):
+        """
+        Extracts the system data of this virtual filesystem (ISO) to a path described by `dest`
 
-        self.onPhysicalJobStart(jobSize)
+        `dest`: Where to extract the system data to
+        """
+        if isinstance(dest, str):
+            dest = Path(dest)
+
+        if not blockEnterExitSignals:
+            jobSize = self._get_sys_size()
+            self.onPhysicalJobEnter(jobSize)
 
         systemPath = dest / "sys"
         systemPath.mkdir(parents=True, exist_ok=True)
 
+        self.onPhysicalTaskDescribe("boot.bin")
         with Path(systemPath, "boot.bin").open("wb") as f:
             self.bootheader.save(f)
+        self.onPhysicalTaskComplete(0x440)
 
-        self.onPhysicalJobComplete(0x440)
-
+        self.onPhysicalTaskDescribe("bi2.bin")
         with Path(systemPath, "bi2.bin").open("wb") as f:
             self.bootinfo.save(f)
+        self.onPhysicalTaskComplete(0x2000)
 
-        self.onPhysicalJobComplete(0x2000)
-
+        self.onPhysicalTaskDescribe("apploader.img")
         with Path(systemPath, "apploader.img").open("wb") as f:
             self.apploader.save(f)
-
-        self.onPhysicalJobComplete(
+        self.onPhysicalTaskComplete(
             self.apploader.loaderSize + self.apploader.trailerSize)
 
+        self.onPhysicalTaskDescribe("main.dol")
         with Path(systemPath, "main.dol").open("wb") as f:
             self.dol.save(f)
+        self.onPhysicalTaskComplete(self.dol.size)
 
-        self.onPhysicalJobComplete(self.dol.size)
-
+        self.onPhysicalTaskDescribe("fst.bin")
         with Path(systemPath, "fst.bin").open("wb") as f:
             f.write(self._rawFST.getvalue())
+        self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
 
-        self.onPhysicalJobExit(len(self._rawFST.getbuffer()))
+        if not blockEnterExitSignals:
+            self.onPhysicalJobExit(len(self._rawFST.getbuffer()))
 
-    def save_system_data(self):
+    def save_system_data(self, blockEnterExitSignals: bool = False):
         jobSize = 0x2440 + (self.apploader.loaderSize +
                             self.apploader.trailerSize)
         jobSize += self.dol.size
-        jobSize += self.num_children()
+        if self.bnr:
+            jobSize += len(self.bnr)
 
-        self.onPhysicalJobStart(jobSize)
+        if not blockEnterExitSignals:
+            self.onPhysicalJobEnter(jobSize)
 
         systemPath = self.systemPath
 
         if self.is_dolphin_root():
+            self.onPhysicalTaskDescribe("boot.bin")
             with Path(systemPath, "boot.bin").open("wb") as f:
                 self.bootheader.save(f)
+            self.onPhysicalTaskComplete(0x440)
 
-            self.onPhysicalJobComplete(0x440)
-
+            self.onPhysicalTaskDescribe("bi2.bin")
             with Path(systemPath, "bi2.bin").open("wb") as f:
                 self.bootinfo.save(f)
+            self.onPhysicalTaskComplete(0x2000)
 
-            self.onPhysicalJobComplete(0x2000)
-
+            self.onPhysicalTaskDescribe("apploader.img")
             with Path(systemPath, "apploader.img").open("wb") as f:
                 self.apploader.save(f)
-
-            self.onPhysicalJobComplete(
+            self.onPhysicalTaskComplete(
                 self.apploader.loaderSize + self.apploader.trailerSize)
 
+            self.onPhysicalTaskDescribe("main.dol")
             with Path(systemPath, "main.dol").open("wb") as f:
                 self.dol.save(f)
+            self.onPhysicalTaskComplete(self.dol.size)
         elif self.is_gcr_root():
+            self.onPhysicalTaskDescribe("ISO.hdr")
             with Path(systemPath, "ISO.hdr").open("wb") as f:
                 self.bootheader.save(f)
                 self.bootinfo.save(f)
+            self.onPhysicalTaskComplete(0x2440)
 
-            self.onPhysicalJobComplete(0x2440)
-
+            self.onPhysicalTaskDescribe("Apploader.ldr")
             with Path(systemPath, "Apploader.ldr").open("wb") as f:
                 self.apploader.save(f)
-
-            self.onPhysicalJobComplete(
+            self.onPhysicalTaskComplete(
                 self.apploader.loaderSize + self.apploader.trailerSize)
 
+            self.onPhysicalTaskDescribe("Start.dol")
             with Path(systemPath, "Start.dol").open("wb") as f:
                 self.dol.save(f)
+            self.onPhysicalTaskComplete(self.dol.size)
         else:
             raise InvalidFSTError(f"{self.root} is not a valid root folder")
 
         if self.bnr:
+            self.onPhysicalTaskDescribe("opening.bnr")
             self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
+            self.onPhysicalTaskComplete(len(self.bnr))
 
-        self.onPhysicalJobComplete(self.dol.size)
         self._save_config_regen()
-        self.onPhysicalJobExit(jobSize)
 
-    def save_system_datav(self):
+        if not blockEnterExitSignals:
+            self.onPhysicalJobExit(jobSize)
+
+    def save_system_datav(self, blockEnterExitSignals: bool = False):
         jobSize = 0x2440 + (self.apploader.loaderSize +
                             self.apploader.trailerSize)
         jobSize += self.dol.size
 
-        self.onVirtualJobStart(jobSize)
+        bnrNode = self.find_by_path("opening.bnr")
+        if bnrNode and self.bnr:
+            jobSize += len(self.bnr)
+
+        if not blockEnterExitSignals:
+            self.onVirtualJobEnter(jobSize)
 
         with self.isoPath.open("r+b") as f:
+            self.onVirtualTaskDescribe("boot.bin")
             self.bootheader.save(f)
-            self.onVirtualJobComplete(0x440)
+            self.onVirtualTaskComplete(0x440)
+
+            self.onVirtualTaskDescribe("bi2.bin")
             self.bootinfo.save(f)
-            self.onVirtualJobComplete(0x2000)
+            self.onVirtualTaskComplete(0x2000)
+            
+            self.onVirtualTaskDescribe("apploader.img")
             self.apploader.save(f)
-            self.onVirtualJobComplete(
+            self.onVirtualTaskComplete(
                 self.apploader.loaderSize + self.apploader.trailerSize)
+                
+            self.onVirtualTaskDescribe("main.dol")
             self.dol.save(f, self.bootheader.dolOffset)
-            self.onVirtualJobComplete(self.dol.size)
+            self.onVirtualTaskComplete(self.dol.size)
 
             bnrNode = self.find_by_path("opening.bnr")
-            if bnrNode:
+            if bnrNode and self.bnr:
+                self.onVirtualTaskDescribe("opening.bnr")
                 f.seek(bnrNode._fileoffset)
                 f.write(self.bnr._rawdata.getvalue())
+                self.onVirtualTaskComplete(len(self.bnr))
 
-        self.onVirtualJobExit(jobSize)
+        if not blockEnterExitSignals:
+            self.onVirtualJobExit(jobSize)
 
     def get_auto_blob_size(self) -> int:
         _size = 0
@@ -714,7 +747,7 @@ class GamecubeISO(ISOBase):
         self.isoPath = Path(
             root.parent / f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}].iso").resolve()
 
-    def extract_path(self, path: Union[Path, str], dest: Union[Path, str], dumpPositions: bool = False):
+    def extract_path(self, path: Union[Path, str], dest: Union[Path, str], dumpPositions: bool = False, blockEnterExitSignals: bool = False):
         if isinstance(path, str):
             path = Path(path)
 
@@ -725,14 +758,16 @@ class GamecubeISO(ISOBase):
         if not node:
             return
 
-        jobSize = node.datasize
-        self.onPhysicalJobStart(jobSize)
+        if not blockEnterExitSignals:
+            jobSize = node.datasize
+            self.onPhysicalJobEnter(jobSize)
 
         with self.isoPath.open("rb") as _rawISO:
             self._recursive_extract(
                 node, dest / node.name, _rawISO, dumpPositions)
 
-        self.onPhysicalJobExit(jobSize)
+        if not blockEnterExitSignals:
+            self.onPhysicalJobExit(jobSize)
 
     def replace_path(self, path: str, new: Path):
         """
@@ -899,6 +934,12 @@ class GamecubeISO(ISOBase):
 
         with self.configPath.open("w") as f:
             json.dump(config, f, indent=4)
+
+    def _get_sys_size(self) -> int:
+        jobSize = 0x2440 + (self.apploader.loaderSize +
+                            self.apploader.trailerSize)
+        jobSize += self.dol.size
+        return jobSize + len(self._rawFST.getbuffer())
 
     def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: tuple = ()):
         for entry in sorted(path.iterdir(), key=lambda x: x.name.upper()):
