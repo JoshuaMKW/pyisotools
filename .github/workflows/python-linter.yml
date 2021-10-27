@@ -24,12 +24,10 @@ jobs:
       run: |
         echo "PYLINT_COLOR=red" >> $GITHUB_ENV
         echo "PYLINT_VALUE=failing" >> $GITHUB_ENV
-        echo "::set-env name=flag::false"
-        echo "::set-env name=test_dyn::$(python linter.py pyisotools -t 7.0)"
-        echo {{ env.PYLINT_COLOR }}
-        echo {{ env.PYLINT_VALUE }}
-        echo {{ env.flag }}
-        echo {{ env.test_dyn }}
+        echo "PYLINT_TEST=$(python linter.py pyisotools -t 7.0)" >> $GITHUB_ENV
+        echo ${{ env.PYLINT_COLOR }}
+        echo ${{ env.PYLINT_VALUE }}
+        echo ${{ env.PYLINT_TEST }}
   badge:
     needs: build
     if: always()
