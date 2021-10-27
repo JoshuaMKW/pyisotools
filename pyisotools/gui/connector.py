@@ -31,6 +31,7 @@ from .nodewindow import Ui_NodeFieldWindow
 from .updater import GitUpdateScraper
 from .updatewindow import Ui_UpdateDialog
 from .workpathing import get_program_folder, resource_path
+from .filesizemap import pretty_filesize
 
 
 class ProgramState():
@@ -95,7 +96,7 @@ def excepthook(args: Tuple[BaseException, TracebackType, int, Union[threading.Th
 threading.excepthook = excepthook
 
 
-def notify_status(notification: Union[str, QDialog], context: JobDialogState):
+def notify_status(notification: Union[str, QDialog, None], context: JobDialogState):
     """ Wrapped function must return a (Controller, bool, str) tuple to indicate a status, and show message """
     def decorater_inner(func: Callable):
         @functools.wraps(func)
@@ -191,7 +192,7 @@ class JobCompleteDialog(QMessageBox):
     def __init__(self, *args, info=None, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if not info:
+        if info is None:
             info = ""
 
         self.setIcon(QMessageBox.Information)
@@ -226,6 +227,46 @@ class Controller(QMainWindow):
     class Themes(Enum):
         LIGHT = 0
         DARK = 0
+
+    class ProgressHandler():
+        Depth = 0
+        JobSize = 0
+        JobProgress = 0
+        NumIterations = 0
+
+        def reset():
+            Controller.ProgressHandler.Depth = 0
+            Controller.ProgressHandler.JobSize = 0
+            Controller.ProgressHandler.JobProgress = 0
+            Controller.ProgressHandler.NumIterations = 0
+
+        @staticmethod
+        def _iso_enter_callback(jobSize: int) -> None:
+            Controller.ProgressHandler.reset()
+            Controller.ProgressHandler.JobSize = jobSize
+
+            controller = Controller.get_instance()
+            controller.ui.operationProgressBar.setTextVisible(True)
+            controller.ui.operationProgressBar.setMaximum(jobSize)
+            controller.ui.operationProgressBar.setValue(0)
+
+        @staticmethod
+        def _iso_describe_callback(fileName: str) -> None:
+            controller = Controller.get_instance()
+            controller.ui.operationProgressBar.setFormat(f"{fileName} %p%")
+
+        @staticmethod
+        def _iso_complete_callback(progress: int) -> None:
+            Controller.ProgressHandler.JobProgress += progress
+            Controller.ProgressHandler.NumIterations += 1
+
+            controller = Controller.get_instance()
+            controller.ui.operationProgressBar.setValue(
+                Controller.ProgressHandler.JobProgress)
+
+        @staticmethod
+        def _iso_exit_callback(completed: int) -> None:
+            return None
 
     _singleInstance: Controller = None
 
@@ -340,12 +381,14 @@ class Controller(QMainWindow):
             self._fromIso = True
 
             iso = GamecubeISO.from_iso(self.rootPath)
-            iso.onPhysicalJobStart = self._iso_start_callback
-            iso.onPhysicalJobComplete = self._iso_complete_callback
-            iso.onPhysicalJobExit = self._iso_exit_callback
-            iso.onVirtualJobStart = self._iso_start_callback
-            iso.onVirtualJobComplete = self._iso_complete_callback
-            iso.onVirtualJobExit = self._iso_exit_callback
+            iso.onPhysicalJobEnter = self.ProgressHandler._iso_enter_callback
+            iso.onPhysicalTaskDescribe = self.ProgressHandler._iso_describe_callback
+            iso.onPhysicalTaskComplete = self.ProgressHandler._iso_complete_callback
+            iso.onPhysicalJobExit = self.ProgressHandler._iso_exit_callback
+            iso.onVirtualJobEnter = self.ProgressHandler._iso_enter_callback
+            iso.onVirtualTaskDescribe = self.ProgressHandler._iso_describe_callback
+            iso.onVirtualTaskComplete = self.ProgressHandler._iso_complete_callback
+            iso.onVirtualJobExit = self.ProgressHandler._iso_exit_callback
             self.iso = iso
 
             self.ui.actionClose.setEnabled(True)
@@ -384,15 +427,17 @@ class Controller(QMainWindow):
             self._fromIso = False
 
             iso = GamecubeISO.from_root(self.rootPath, True)
-            iso.onPhysicalJobStart = self._iso_start_callback
-            iso.onPhysicalJobComplete = self._iso_complete_callback
-            iso.onPhysicalJobExit = self._iso_exit_callback
-            iso.onVirtualJobStart = self._iso_start_callback
-            iso.onVirtualJobComplete = self._iso_complete_callback
-            iso.onVirtualJobExit = self._iso_exit_callback
+            iso.onPhysicalJobEnter = self.ProgressHandler._iso_enter_callback
+            iso.onPhysicalTaskDescribe = self.ProgressHandler._iso_describe_callback
+            iso.onPhysicalTaskComplete = self.ProgressHandler._iso_complete_callback
+            iso.onPhysicalJobExit = self.ProgressHandler._iso_exit_callback
+            iso.onVirtualJobEnter = self.ProgressHandler._iso_enter_callback
+            iso.onVirtualTaskDescribe = self.ProgressHandler._iso_describe_callback
+            iso.onVirtualTaskComplete = self.ProgressHandler._iso_complete_callback
+            iso.onVirtualJobExit = self.ProgressHandler._iso_exit_callback
             self.iso = iso
 
-            self.bnrMap = self.iso.bnr
+            self.bnrMap["opening.bnr"] = self.iso.bnr
             self.ui.bannerComboBox.clear()
             self.ui.bannerComboBox.addItems(sorted(
                 [p.name for p in self.iso.rchildren() if fnmatch(p.name, "*.bnr")], key=str.lower))
@@ -415,7 +460,7 @@ class Controller(QMainWindow):
 
         return True, ""
 
-    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status("Build", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_build_dialog(self) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Build Root To...",
@@ -436,7 +481,7 @@ class Controller(QMainWindow):
 
         return True
 
-    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_extract_dialog(self, dumpPositions: bool = False) -> Tuple[bool, str]:
         dialog = QFileDialog(parent=self,
                              caption="Extract ISO To...",
@@ -445,14 +490,21 @@ class Controller(QMainWindow):
         dialog.setFileMode(QFileDialog.DirectoryOnly)
 
         if dialog.exec_() != QFileDialog.Accepted:
-            return False
+            return False, None
 
         self.extractPath = Path(dialog.selectedFiles()[0]).resolve()
         self.save_all(False)
 
         self.iso.extract(self.extractPath, dumpPositions)
 
-        return True
+        size = self.ProgressHandler.JobProgress
+        target = self.ProgressHandler.JobSize
+
+        percentProcessed = f"{size/target*100:.2f}%"
+        numNodes = self.ProgressHandler.NumIterations
+
+        self.ProgressHandler.reset()
+        return True, f"Extracted {numNodes} files/folders.\n{percentProcessed} of data was processed."
 
     @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def iso_extract_system_dialog(self) -> Tuple[bool, str]:
@@ -468,6 +520,7 @@ class Controller(QMainWindow):
         self.genericPath = Path(dialog.selectedFiles()[0]).resolve()
         self.iso.extract_system_data(self.genericPath)
 
+        self.ProgressHandler.reset()
         return True
 
     @notify_status("The file does not exist!", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
@@ -501,22 +554,28 @@ class Controller(QMainWindow):
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
+        bnrComboBox = self.ui.bannerComboBox
+        curBnrName = bnrComboBox.currentText()
+
         if self.bnrImagePath.is_file():
             if self.bnrImagePath.suffix == ".bnr":
-                self.bnrMap.rawImage = BytesIO(
+                # Set BNR image to that of target BNR
+                self.bnrMap[curBnrName].rawImage = BytesIO(
                     self.bnrImagePath.read_bytes()[0x20:0x1820])
-                self.bnr_update_info()
             else:
                 with Image.open(self.bnrImagePath) as image:
                     if image.size != (96, 32):
                         dialog = JobWarningDialog(
                             f"Resizing image of size {image.size} to match BNR size (96, 32)", self)
                         dialog.exec_()
-                    self.bnrMap.rawImage = image
-                pixmap = ImageQt.toqpixmap(self.bnrMap.getImage())
-                pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
-                ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
-                self.ui.bannerImageView.setPixmap(pixmap)
+                    # Set BNR image to that of target image
+                    self.bnrMap[curBnrName].rawImage = image
+
+            # Convert BNR image to QtPixmap and set on view
+            pixmap = ImageQt.toqpixmap(self.bnrMap.getImage())
+            pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
+            ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
+            self.ui.bannerImageView.setPixmap(pixmap)
 
             return True, ""
         else:
@@ -563,6 +622,8 @@ class Controller(QMainWindow):
                         f.seek(node._fileoffset)
                         self.bnrMap[node.path] = BNR.from_data(
                             f, size=node.size)
+        else:
+            pass # TODO: Add root BNR logic
 
         self.ui.bannerComboBox.clear()
         self.ui.bannerComboBox.addItems(sorted(
@@ -833,15 +894,16 @@ class Controller(QMainWindow):
 
         if not showjob:
             if self.is_from_iso():
-                self.iso.save_system_datav()
+                self.iso.save_system_datav(blockEnterExitSignals=True)
             else:
-                self.iso.save_system_data()
+                self.iso.save_system_data(blockEnterExitSignals=True)
             return True, ""
         else:
             if self.is_from_iso():
                 self.iso.save_system_datav()
             else:
                 self.iso.save_system_data()
+            self.ProgressHandler.reset()
 
             dialog = JobCompleteDialog(self)
             if self.is_from_iso():
@@ -963,7 +1025,7 @@ class Controller(QMainWindow):
             self.ui.fileSystemSizeInfoTextBox.setPlainText(
                 f"0x{item.node.size:X}")
 
-    @notify_status("", JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
     def save_generic_to_folder(self, parent=None, caption="Save to folder...", filter=None, callback: Callable[[Controller, Path, Tuple], None] = None, args=()) -> Tuple[bool, str]:
         if filter is None:
             filter = "Any folder"
@@ -985,6 +1047,7 @@ class Controller(QMainWindow):
         if callback:
             callback(self, self.genericPath, *args)
 
+            self.ProgressHandler.reset()
             return True
         else:
             return True
@@ -1139,54 +1202,6 @@ class Controller(QMainWindow):
 
             parent.addChild(treeNode)
 
-    @staticmethod
-    def _iso_start_callback(jobSize: int) -> None:
-        controller = Controller.get_instance()
-        controller.ui.operationProgressBar.setTextVisible(True)
-        controller.ui.operationProgressBar.setMaximum(jobSize)
-        controller.ui.operationProgressBar.setValue(0)
-
-    @staticmethod
-    def _iso_complete_callback(progress: int) -> None:
-        controller = Controller.get_instance()
-        current = controller.ui.operationProgressBar.value()
-        controller.ui.operationProgressBar.setValue(current + progress)
-
-    @staticmethod
-    def _iso_exit_callback(completed: int) -> None:
-        controller = Controller.get_instance()
-        controller.ui.operationProgressBar.setValue(completed)
-
-
-class ProgressHandler(FlagThread):
-    def __init__(self, controller: Controller, t: FlagThread, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.controller = controller
-        self.watched = t
-        self.setObjectName(f"{self.__class__.__name__}.{t.getName()}")
-        ThreadManager.register(self)
-
-    def __del__(self):
-        ThreadManager.deregister(self)
-
-    def run(self):
-        self.controller.ui.operationProgressBar.setTextVisible(True)
-        self.controller.ui.operationProgressBar.setMaximum(
-            self.controller.iso.progress.jobSize)
-        self.controller.ui.operationProgressBar.setValue(0)
-
-        while self.controller.iso.progress.jobProgress < self.controller.iso.progress.jobSize and not self.watched.isFinished():
-            self.controller.ui.operationProgressBar.setValue(
-                self.controller.iso.progress.jobProgress)
-            time.sleep(0.01)
-
-        self.controller.ui.operationProgressBar.setValue(
-            self.controller.iso.progress.jobProgress)
-
-    def exit(self, retcode: int = 0):
-        super().exit(retcode)
-        ThreadManager.deregister(self)
-
 
 def _recursive_enable(parent):
     for member in [getattr(parent, attr) for attr in dir(parent) if not callable(getattr(parent, attr)) and not attr.startswith("__")]:
@@ -1196,7 +1211,7 @@ def _recursive_enable(parent):
 
 
 def _extract_path_from_iso(controller: Controller, dest: Path, node: FSTNode):
-    controller.iso.extract_path(node.fullPath, dest)
+    controller.iso.extract_path(node.path, dest)
 
 
 def _round_up_to_power_of_2(n):

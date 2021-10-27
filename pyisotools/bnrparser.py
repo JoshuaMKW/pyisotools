@@ -263,8 +263,8 @@ class BNR(RGB5A3):
             for blockColumn in range(BNR.ImgTileWidth):
                 for tileRow in range(BNR.TileHeight):
                     for tileColumn in range(BNR.TileWidth):
-                        column = blockColumn*BNR.TileWidth + tileRow
-                        row = blockRow*BNR.TileHeight + tileColumn
+                        column = blockColumn*BNR.TileWidth + tileColumn
+                        row = blockRow*BNR.TileHeight + tileRow
 
                         pixel = int.from_bytes(
                             _image.read(2), "big", signed=False)
@@ -348,6 +348,9 @@ class BNR(RGB5A3):
         if (pixel >> 15) & 1:
             return RGB5A1.decode_pixel(pixel)
         return RGB5A3.decode_pixel(pixel)
+
+    def __len__(self) -> int:
+        return 0x1960 if self.regionID != BNR.Regions.EUROPE else 0x1FA0
 
 
 if __name__ == "__main__":
