@@ -4,3 +4,4 @@ pillow
 sortedcontainers
 bs4
 qdarkstyle
+pygithub
