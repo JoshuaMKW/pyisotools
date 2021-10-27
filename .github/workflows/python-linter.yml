@@ -22,17 +22,4 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Quality checking the code with pylint
       run: |
-        python linter.py pyisotools -t 7.0
-  badge:
-    needs: build
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-    - uses: Schneegans/dynamic-badges-action@v1.1.0
-      with:
-        auth: ${{ secrets.GIST_SECRET }}
-        gistID: c0db8774048c6d42759903ca1b6a21e9
-        filename: pylint.json
-        label: Pylint
-        message: ${{ env.PYLINT_VALUE }}
-        color: ${{ env.PYLINT_COLOR }}
+        python -m pylint pyisotools
