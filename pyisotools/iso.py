@@ -235,6 +235,7 @@ class ISOBase(_ISOInfo):
 
         if self._locationTable:
             return self._locationTable.get(_path)
+        return None
 
     def _get_excluded(self, node: Union[FSTNode, str]) -> bool:
         if isinstance(node, FSTNode):

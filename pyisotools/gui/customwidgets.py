@@ -10,6 +10,7 @@ from PySide2.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem
 from ..fst import FSTNode
 
 # pylint: disable=invalid-name
+# pylint: disable=no-member
 class FilteredPlainTextEdit(QPlainTextEdit):
 
     class ScrollPolicy(IntEnum):
@@ -159,3 +160,4 @@ class FSTTreeItem(QTreeWidgetItem):
         return self.node._id < other.node._id
 
 # pylint: enable=invalid-name
+# pylint: enable=no-member
