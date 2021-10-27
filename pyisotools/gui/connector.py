@@ -164,23 +164,6 @@ def notify_status(notification: Union[str, QDialog], context: JobDialogState):
     return decorater_inner
 
 
-__func_guarded = {}
-
-
-def guard(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        global __func_guarded
-        isGuarded = __func_guarded.setdefault(func, False)
-        if isGuarded:
-            return
-        __func_guarded[func] = True
-        value = func(*args, **kwargs)
-        __func_guarded[func] = False
-        return value
-    return wrapper
-
-
 class JobDialogState(IntEnum):
     SHOW_NONE = 0
     SHOW_COMPLETE = 1
@@ -885,6 +868,7 @@ class Controller(QMainWindow):
 
         self.ui.fileSystemTreeWidget.sortItems(0, Qt.SortOrder.AscendingOrder)
 
+    # pylint: disable=no-member
     def file_system_context_menu(self, point):
         # Infos about the node selected.
         index = self.ui.fileSystemTreeWidget.indexAt(point)
@@ -962,6 +946,7 @@ class Controller(QMainWindow):
                 menu.addAction(extractAction)
 
         menu.exec_(self.ui.fileSystemTreeWidget.mapToGlobal(point))
+    # pylint: enable=no-member
 
     def file_system_set_fields(self, item: FSTTreeItem, column: int):
         if item.node.is_dir():

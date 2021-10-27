@@ -93,7 +93,7 @@ class GitUpdateScraper(FlagThread, ReleaseManager):
     updateFound = Signal()
 
     def __init__(self, owner: str, repository: str, parent=None):
-        super(FlagThread, self).__init__(parent)
+        FlagThread.__init__(self, parent)
         ReleaseManager.__init__(self, owner, repository)
         self.setObjectName(f"{self.__class__.__name__}.{owner}.{repository}")
 
