@@ -234,6 +234,7 @@ class Controller(QMainWindow):
         JobProgress = 0
         NumIterations = 0
 
+        @staticmethod
         def reset():
             Controller.ProgressHandler.Depth = 0
             Controller.ProgressHandler.JobSize = 0
@@ -321,7 +322,17 @@ class Controller(QMainWindow):
         self.updater.start()
         ThreadManager.register(self.updater)
 
-    def closeEvent(self, event):
+    def is_from_iso(self) -> bool:
+        return self._fromIso
+
+    def get_current_bnr(self) -> Tuple[BNR, str]:
+        bnrComboBox = self.ui.bannerComboBox
+        curBnrName = bnrComboBox.currentText()
+        if curBnrName in self.bnrMap:
+            return self.bnrMap, curBnrName
+        return None
+
+    def closeEvent(self, event: QEvent):
         self.update_program_config()
         self.updater.exit(0)
         for thread in ThreadManager.threads():
@@ -349,9 +360,6 @@ class Controller(QMainWindow):
             self.updater.view(newestRelease)
 
         self.updater.blockSignals(False)
-
-    def is_from_iso(self) -> bool:
-        return self._fromIso
 
     # ----------------------------- #
     # -- // CONNECTED SIGNALS // -- #
@@ -572,7 +580,7 @@ class Controller(QMainWindow):
                     self.bnrMap[curBnrName].rawImage = image
 
             # Convert BNR image to QtPixmap and set on view
-            pixmap = ImageQt.toqpixmap(self.bnrMap.getImage())
+            pixmap = ImageQt.toqpixmap(self.get_current_bnr()[0].get_image())
             pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
             ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
             self.ui.bannerImageView.setPixmap(pixmap)
@@ -597,7 +605,7 @@ class Controller(QMainWindow):
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
-        image = self.bnrMap.getImage()
+        image = self.get_current_bnr()[0].get_image()
         image.save(self.bnrImagePath)
 
         return True

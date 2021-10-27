@@ -40,8 +40,7 @@ class _ISOInfo(FST):
 # pylint: disable=not-callable
 
 
-class ISOBase(_ISOInfo):
-
+class Partition(_ISOInfo):
     def __init__(self):
         super().__init__()
 
@@ -57,16 +56,44 @@ class ISOBase(_ISOInfo):
         self._onVirtualTaskComplete: Callable[[int], None] = None
         self._onVirtualJobExit: Callable[[int], None] = None
 
-        self.isoPath = None
-        self.bootheader = None
-        self.bootinfo = None
-        self.apploader = None
-        self.dol = None
-        self._rawFST = None
+        self.targetPath: Path = None
+        self.bootheader: Boot = None
+        self.bootinfo: BI2 = None
+        self.apploader: Apploader = None
+        self.dol: DolFile = None
+        self._rawFST: BytesIO = None
 
         self._alignmentTable = SortedDict()
         self._locationTable = SortedDict()
         self._excludeTable = SortedList()
+
+    @property
+    def systemPath(self) -> Path:
+        if self.root:
+            if Partition.is_gcr_root(self.root):
+                return self.root / "&&systemdata"
+            return self.root / "sys"
+        return None
+
+    @property
+    def dataPath(self) -> Path:
+        if self.root:
+            if Partition.is_gcr_root(self.root):
+                return self.root
+            return self.root / self.name
+        return None
+
+    @property
+    def configPath(self) -> Path:
+        if self.root:
+            return self.systemPath / ".config.json"
+        return None
+
+    @property
+    def bnrPath(self) -> Path:
+        if self.root:
+            return self.dataPath / "opening.bnr"
+        return None
 
     # pylint: disable=unused-argument
     @staticmethod
@@ -153,6 +180,23 @@ class ISOBase(_ISOInfo):
     @onVirtualJobExit.setter
     def onVirtualJobExit(self, callback: Callable[[int], None]):
         self._onVirtualJobExit = callback
+
+    @staticmethod
+    def is_dolphin_root(path: Union[Path, str]) -> bool:
+        if path.is_dir():
+            folders = {x.name.lower()
+                       for x in path.iterdir() if x.is_dir()}
+            return "sys" in folders and "files" in folders and "&&systemdata" not in folders
+        return False
+
+    @staticmethod
+    def is_gcr_root(path: Union[Path, str]) -> bool:
+        path = Path(path)
+        if path.is_dir():
+            folders = {x.name.lower()
+                       for x in path.iterdir() if x.is_dir()}
+            return "&&systemdata" in folders
+        return False
 
     def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> FSTNode:
         _type = read_ubyte(fst)
@@ -274,12 +318,12 @@ class ISOBase(_ISOInfo):
         return False
 
 
-class WiiISO(ISOBase):
+class WiiISO():
 
     MaxSize = 4699979776
 
 
-class GamecubeISO(ISOBase):
+class GamecubeISO():
 
     MaxSize = 1459978240
 
@@ -299,51 +343,15 @@ class GamecubeISO(ISOBase):
         virtualISO.init_from_iso(iso)
         return virtualISO
 
-    @property
-    def configPath(self) -> Path:
-        if self.root:
-            return self.systemPath / ".config.json"
-        return None
-
-    @property
-    def systemPath(self) -> Path:
-        if self.root:
-            if self.is_gcr_root():
-                return self.root / "&&systemdata"
-            return self.root / "sys"
-        return None
-
-    @property
-    def dataPath(self) -> Path:
-        if self.root:
-            if self.is_gcr_root():
-                return self.root
-            return self.root / self.name
-        return None
-
     @staticmethod
     def build_root(root: Path, dest: Union[Path, str] = None, genNewInfo: bool = False):
         virtualISO = GamecubeISO.from_root(root, genNewInfo)
         virtualISO.build(dest)
 
     @staticmethod
-    def extract_from(iso: Path, dest: Union[Path, str] = None):
+    def extract_iso(iso: Path, dest: Union[Path, str] = None):
         virtualISO = GamecubeISO.from_iso(iso)
         virtualISO.extract(dest)
-
-    def is_dolphin_root(self) -> bool:
-        if self.root:
-            folders = {x.name.lower()
-                       for x in self.root.iterdir() if x.is_dir()}
-            return "sys" in folders and "files" in folders and "&&systemdata" not in folders
-        return False
-
-    def is_gcr_root(self) -> bool:
-        if self.root:
-            folders = {x.name.lower()
-                       for x in self.root.iterdir() if x.is_dir()}
-            return "&&systemdata" in folders
-        return False
 
     def build(self, dest: Union[Path, str] = None, preCalc: bool = True):
         self.onVirtualJobEnter(self.MaxSize)
@@ -424,37 +432,22 @@ class GamecubeISO(ISOBase):
 
         # -- Files -- #
 
-        self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
+        self.bnr.save_bnr(self.dataPath / "opening.bnr")
 
         with self.isoPath.open("wb") as f:
-            self.bootheader.save(f)
-            self.onVirtualTaskComplete(0x440)
-
-            self.bootinfo.save(f)
-            self.onVirtualTaskComplete(0x2000)
-
-            self.apploader.save(f)
-            self.onVirtualTaskComplete(
-                self.apploader.loaderSize + self.apploader.trailerSize)
-
-            f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))
-            self.dol.save(f, self.bootheader.dolOffset)
-            self.onVirtualTaskComplete(self.dol.size)
-
-            f.seek(f.tell() + self.dol.size)
-            f.write(b"\x00" * (self.bootheader.fstOffset - f.tell()))
-
-            f.write(self._rawFST.getvalue())
-            self.onVirtualTaskComplete(len(self._rawFST.getbuffer()))
+            self.save_system_datav(f, True)
 
             for child in self.rfiles(includedOnly=True):
+                self.onVirtualTaskDescribe(child.path)
                 f.write(b"\x00" * (child._fileoffset - f.tell()))
                 f.seek(child._fileoffset)
                 f.write((self.dataPath / child.path).read_bytes())
                 f.seek(0, 2)
-                self.onVirtualTaskComplete(child.size)
+                self.onVirtualTaskComplete(child.datasize)
 
-            f.write(b"\x00" * (self.MaxSize - f.tell()))
+            padSize = self.MaxSize - f.tell()
+            f.write(b"\x00" * padSize)
+            self.onVirtualTaskComplete(child.padSize)
 
         # ----------- #
 
@@ -493,53 +486,29 @@ class GamecubeISO(ISOBase):
         if isinstance(dest, str):
             dest = Path(dest)
 
-        if not blockEnterExitSignals:
-            jobSize = self._get_sys_size()
-            self.onPhysicalJobEnter(jobSize)
-
         systemPath = dest / "sys"
         systemPath.mkdir(parents=True, exist_ok=True)
 
-        self.onPhysicalTaskDescribe("boot.bin")
-        with Path(systemPath, "boot.bin").open("wb") as f:
-            self.bootheader.save(f)
-        self.onPhysicalTaskComplete(0x440)
+        self.save_system_data(
+            systemPath, blockEnterExitSignals=blockEnterExitSignals)
 
-        self.onPhysicalTaskDescribe("bi2.bin")
-        with Path(systemPath, "bi2.bin").open("wb") as f:
-            self.bootinfo.save(f)
-        self.onPhysicalTaskComplete(0x2000)
+    def save_system_data(self, dest: Optional[Union[Path, str]] = None, saveBNR: bool = False, blockEnterExitSignals: bool = False):
+        """
+        Saves system data to the sys folder of the current root.
 
-        self.onPhysicalTaskDescribe("apploader.img")
-        with Path(systemPath, "apploader.img").open("wb") as f:
-            self.apploader.save(f)
-        self.onPhysicalTaskComplete(
-            self.apploader.loaderSize + self.apploader.trailerSize)
-
-        self.onPhysicalTaskDescribe("main.dol")
-        with Path(systemPath, "main.dol").open("wb") as f:
-            self.dol.save(f)
-        self.onPhysicalTaskComplete(self.dol.size)
-
-        self.onPhysicalTaskDescribe("fst.bin")
-        with Path(systemPath, "fst.bin").open("wb") as f:
-            f.write(self._rawFST.getvalue())
-        self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
-
+        `dest`: Path to store system data
+        `saveBNR`: Save the opening.bnr if applicable when `True`
+        """
         if not blockEnterExitSignals:
-            self.onPhysicalJobExit(len(self._rawFST.getbuffer()))
-
-    def save_system_data(self, blockEnterExitSignals: bool = False):
-        jobSize = 0x2440 + (self.apploader.loaderSize +
-                            self.apploader.trailerSize)
-        jobSize += self.dol.size
-        if self.bnr:
-            jobSize += len(self.bnr)
-
-        if not blockEnterExitSignals:
+            jobSize = self._get_sys_size()
+            if self.bnr and saveBNR:
+                jobSize += len(self.bnr)
             self.onPhysicalJobEnter(jobSize)
 
-        systemPath = self.systemPath
+        if not dest:
+            systemPath = self.systemPath
+        else:
+            systemPath = Path(dest)
 
         if self.is_dolphin_root():
             self.onPhysicalTaskDescribe("boot.bin")
@@ -562,6 +531,11 @@ class GamecubeISO(ISOBase):
             with Path(systemPath, "main.dol").open("wb") as f:
                 self.dol.save(f)
             self.onPhysicalTaskComplete(self.dol.size)
+
+            self.onPhysicalTaskDescribe("fst.bin")
+            with Path(systemPath, "fst.bin").open("wb") as f:
+                f.write(self._rawFST.getvalue())
+            self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
         elif self.is_gcr_root():
             self.onPhysicalTaskDescribe("ISO.hdr")
             with Path(systemPath, "ISO.hdr").open("wb") as f:
@@ -579,10 +553,15 @@ class GamecubeISO(ISOBase):
             with Path(systemPath, "Start.dol").open("wb") as f:
                 self.dol.save(f)
             self.onPhysicalTaskComplete(self.dol.size)
+
+            self.onPhysicalTaskDescribe("Game.toc")
+            with Path(systemPath, "Game.toc").open("wb") as f:
+                f.write(self._rawFST.getvalue())
+            self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
         else:
             raise InvalidFSTError(f"{self.root} is not a valid root folder")
 
-        if self.bnr:
+        if self.bnr and saveBNR:
             self.onPhysicalTaskDescribe("opening.bnr")
             self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
             self.onPhysicalTaskComplete(len(self.bnr))
@@ -592,10 +571,14 @@ class GamecubeISO(ISOBase):
         if not blockEnterExitSignals:
             self.onPhysicalJobExit(jobSize)
 
-    def save_system_datav(self, blockEnterExitSignals: bool = False):
+    def save_system_datav(self, f: BinaryIO, blockEnterExitSignals: bool = False):
+        """
+        Save the system data to in the ISO header format to the binary stream `f`
+        """
         jobSize = 0x2440 + (self.apploader.loaderSize +
                             self.apploader.trailerSize)
         jobSize += self.dol.size
+        jobSize += len(self._rawFST.getbuffer())
 
         bnrNode = self.find_by_path("opening.bnr")
         if bnrNode and self.bnr:
@@ -604,30 +587,36 @@ class GamecubeISO(ISOBase):
         if not blockEnterExitSignals:
             self.onVirtualJobEnter(jobSize)
 
-        with self.isoPath.open("r+b") as f:
-            self.onVirtualTaskDescribe("boot.bin")
-            self.bootheader.save(f)
-            self.onVirtualTaskComplete(0x440)
+        self.onVirtualTaskDescribe("boot.bin")
+        self.bootheader.save(f)
+        self.onVirtualTaskComplete(0x440)
 
-            self.onVirtualTaskDescribe("bi2.bin")
-            self.bootinfo.save(f)
-            self.onVirtualTaskComplete(0x2000)
-            
-            self.onVirtualTaskDescribe("apploader.img")
-            self.apploader.save(f)
-            self.onVirtualTaskComplete(
-                self.apploader.loaderSize + self.apploader.trailerSize)
-                
-            self.onVirtualTaskDescribe("main.dol")
-            self.dol.save(f, self.bootheader.dolOffset)
-            self.onVirtualTaskComplete(self.dol.size)
+        self.onVirtualTaskDescribe("bi2.bin")
+        self.bootinfo.save(f)
+        self.onVirtualTaskComplete(0x2000)
 
-            bnrNode = self.find_by_path("opening.bnr")
-            if bnrNode and self.bnr:
-                self.onVirtualTaskDescribe("opening.bnr")
-                f.seek(bnrNode._fileoffset)
-                f.write(self.bnr._rawdata.getvalue())
-                self.onVirtualTaskComplete(len(self.bnr))
+        self.onVirtualTaskDescribe("apploader.img")
+        self.apploader.save(f)
+        self.onVirtualTaskComplete(
+            self.apploader.loaderSize + self.apploader.trailerSize)
+
+        self.onVirtualTaskDescribe("main.dol")
+        f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))  # Pad zeros
+        self.dol.save(f, self.bootheader.dolOffset)
+        self.onVirtualTaskComplete(self.dol.size)
+
+        self.onVirtualTaskDescribe("fst.bin")
+        f.seek(f.tell() + self.dol.size)
+        f.write(b"\x00" * (self.bootheader.fstOffset - f.tell()))  # Pad zeros
+        f.write(self._rawFST.getvalue())
+        self.onVirtualTaskComplete(len(self._rawFST.getbuffer()))
+
+        bnrNode = self.find_by_path("opening.bnr")
+        if bnrNode and self.bnr:
+            self.onVirtualTaskDescribe("opening.bnr")
+            f.seek(bnrNode._fileoffset)
+            f.write(self.bnr._rawdata.getvalue())
+            self.onVirtualTaskComplete(len(self.bnr))
 
         if not blockEnterExitSignals:
             self.onVirtualJobExit(jobSize)
