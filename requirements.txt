@@ -1,7 +1,8 @@
-dolreader
-PySide2
-pillow
-sortedcontainers
 bs4
+chardet
+dolreader
 qdarkstyle
+sortedcontainers
+pillow
 pygithub
+PySide2

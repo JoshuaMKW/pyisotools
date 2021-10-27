@@ -2,6 +2,8 @@ from typing import Any, Callable, Tuple
 
 from PySide2.QtCore import QThread
 
+# pylint: disable=invalid-name
+
 
 class FlagThread(QThread):
     def __init__(self, target: Callable, args: Tuple[Any] = tuple(), *_args, **_kwargs):
@@ -33,3 +35,5 @@ class FlagThread(QThread):
         ret = self._target(self._args)
         self._isQuit = True
         return ret
+
+# pylint: enable=invalid-name

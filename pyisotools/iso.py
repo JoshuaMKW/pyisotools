@@ -37,6 +37,7 @@ class _ISOInfo(FST):
         self._dataOfs = 0
         self._prevfile = None
 
+# pylint: disable=not-callable
 
 class ISOBase(_ISOInfo):
 
@@ -939,3 +940,5 @@ class GamecubeISO(ISOBase):
                 self._excludeTable.add(node.path)
 
         self.save_config()
+
+# pylint: enable=not-callable
