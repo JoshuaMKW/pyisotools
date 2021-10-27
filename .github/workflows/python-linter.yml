@@ -18,16 +18,14 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint
+        python -m pip install pylint
+        python -m pip install actions-toolkit
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Quality checking the code with pylint
       run: |
-        echo "PYLINT_COLOR=red" >> $GITHUB_ENV
-        echo "PYLINT_VALUE=failing" >> $GITHUB_ENV
-        echo "PYLINT_TEST=$(python linter.py pyisotools -t 7.0)" >> $GITHUB_ENV
+        python linter.py pyisotools -t 7.0
         echo ${{ env.PYLINT_COLOR }}
         echo ${{ env.PYLINT_VALUE }}
-        echo ${{ env.PYLINT_TEST }}
   badge:
     needs: build
     if: always()

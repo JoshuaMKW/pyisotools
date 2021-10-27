@@ -1,10 +1,11 @@
 import argparse
 import os
-
-from glob import glob
-import sys
 import subprocess
+import sys
+from glob import glob
 from typing import Optional, Tuple
+
+from actions_toolkit import core
 from pylint.lint import Run
 
 
@@ -17,8 +18,8 @@ def lint(path: str, threshold: float):
     score = results.linter.stats["global_note"]
 
     if results.linter.msg_status & 3:
-        subprocess.run(["echo", '"PYLINT_COLOR=red"', ">>", "$GITHUB_ENV"])
-        subprocess.run(["echo", '"PYLINT_VALUE=failing"', ">>", "$GITHUB_ENV"])
+        core.export_variable("PYLINT_COLOR", "red")
+        core.export_variable("PYLINT_VALUE", "failing")
         raise CodeQualityError("Code is erroneous!")
 
     if score < 3:
@@ -30,8 +31,8 @@ def lint(path: str, threshold: float):
     else:
         color = "green"
 
-    subprocess.run(["echo", f'"PYLINT_COLOR={color}"', ">>", "$GITHUB_ENV"])
-    subprocess.run(["echo", f'"PYLINT_VALUE={score}"', ">>", "$GITHUB_ENV"])
+    core.export_variable("PYLINT_COLOR", color)
+    core.export_variable("PYLINT_VALUE", score)
 
     if score < threshold:
         raise CodeQualityError(
