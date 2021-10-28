@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from abc import ABC, abstractmethod
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, Callable, Optional, Union
+from typing import BinaryIO, Callable, Dict, List, Optional, Tuple, Union
 
 from dolreader.dol import DolFile
 from sortedcontainers import SortedDict, SortedList
@@ -13,36 +14,24 @@ from pyisotools.apploader import Apploader
 from pyisotools.bi2 import BI2
 from pyisotools.bnrparser import BNR
 from pyisotools.boot import Boot
-from pyisotools.fst import FST, FSTNode, InvalidEntryError, InvalidFSTError
+from pyisotools.fst import (FileSystemTable, FSTFile, FSTFolder,
+                            FSTInvalidError, FSTInvalidNodeError, FSTNode)
 from pyisotools.iohelper import (align_int, read_string, read_ubyte,
                                  read_uint32, write_uint32)
+from pyisotools.partition import Partition, PartitionInvalidError
 
 
-class FileSystemTooLargeError(Exception):
+class DiscTooLargeError(Exception):
     ...
 
-
-class FileSystemInvalidError(Exception):
-    ...
-
-
-class _ISOInfo(FST):
-
-    def __init__(self):
-        super().__init__()
-        self.root: Path = None
-
-        self._curEntry = 0
-        self._strOfs = 0
-        self._dataOfs = 0
-        self._prevfile = None
 
 # pylint: disable=not-callable
 
 
-class Partition(_ISOInfo):
+class BaseISO(ABC):
     def __init__(self):
         super().__init__()
+        self.partitions: Dict[str, Partition] = {}
 
         # File extraction callbacks
         self._onPhysicalJobEnter: Callable[[int], None] = None
@@ -56,44 +45,96 @@ class Partition(_ISOInfo):
         self._onVirtualTaskComplete: Callable[[int], None] = None
         self._onVirtualJobExit: Callable[[int], None] = None
 
-        self.targetPath: Path = None
-        self.bootheader: Boot = None
-        self.bootinfo: BI2 = None
-        self.apploader: Apploader = None
-        self.dol: DolFile = None
-        self._rawFST: BytesIO = None
+    @staticmethod
+    def get_auto_data_size(partition: Partition) -> int:
+        _size = 0
 
-        self._alignmentTable = SortedDict()
-        self._locationTable = SortedDict()
-        self._excludeTable = SortedList()
+        for child in partition.recurse_files(includedOnly=True):
+            if child.position:
+                continue
 
-    @property
-    def systemPath(self) -> Path:
-        if self.root:
-            if Partition.is_gcr_root(self.root):
-                return self.root / "&&systemdata"
-            return self.root / "sys"
-        return None
+            _size = align_int(_size, child.alignment) + child.size
 
-    @property
-    def dataPath(self) -> Path:
-        if self.root:
-            if Partition.is_gcr_root(self.root):
-                return self.root
-            return self.root / self.name
-        return None
+        return _size
 
-    @property
-    def configPath(self) -> Path:
-        if self.root:
-            return self.systemPath / ".config.json"
-        return None
+    @staticmethod
+    @abstractmethod
+    def build_root(root: Path, dest: Union[Path, str] = None, genNewInfo: bool = False):
+        ...
 
-    @property
-    def bnrPath(self) -> Path:
-        if self.root:
-            return self.dataPath / "opening.bnr"
-        return None
+    @staticmethod
+    @abstractmethod
+    def extract_iso(iso: Path, dest: Union[Path, str] = None):
+        ...
+
+    @abstractmethod
+    def init_from_iso(self, iso: Union[Path, str]):
+        ...
+
+    @abstractmethod
+    def init_from_root(self, root: Union[Path, str]):
+        ...
+
+    @abstractmethod
+    def build(dest: Optional[Union[Path, str]] = None, preCalc: bool = True):
+        ...
+
+    @abstractmethod
+    def extract(self, dest: Optional[Union[Path, str]] = None, dumpPositions: bool = True):
+        ...
+
+    def extract_path(
+        self,
+        path: Union[Path, str],
+        dest: Union[Path, str],
+        partitionName: str = "DATA",
+        dumpPositions: bool = False,
+        blockEnterExitSignals: bool = False
+    ):
+        """
+        Extracts the data at `path`, which is a path within the partition as referenced by `partitionName`, and stores it at `dest`
+        """
+        if partitionName not in self.partitions:
+            return
+
+        partition = self.partitions[partitionName]
+
+        if isinstance(path, str):
+            path = Path(path)
+
+        if isinstance(dest, str):
+            dest = Path(dest)
+
+        node = partition.find_by_path(path)
+        if not node:
+            return
+
+        if not blockEnterExitSignals:
+            jobSize = node.datasize
+            self.onPhysicalJobEnter(jobSize)
+
+        with self.isoPath.open("rb") as _rawISO:
+            self._recursive_extract(
+                node, dest / node.name, _rawISO, dumpPositions)
+
+        if not blockEnterExitSignals:
+            self.onPhysicalJobExit(jobSize)
+
+    def replace_path(self, path: str, new: Path):
+        """
+        Replaces the node that matches `path` with the data at path `new`
+
+            path: Virtual path to node to replace
+            new:  Path to file/folder to replace with
+        """
+        if not new.exists():
+            return
+
+        newNode = self.from_path(new)
+        oldNode = self.find_by_path(path)
+
+        oldNode.parent.add_child(newNode)
+        oldNode.destroy()
 
     # pylint: disable=unused-argument
     @staticmethod
@@ -181,70 +222,48 @@ class Partition(_ISOInfo):
     def onVirtualJobExit(self, callback: Callable[[int], None]):
         self._onVirtualJobExit = callback
 
-    @staticmethod
-    def is_dolphin_root(path: Union[Path, str]) -> bool:
-        if path.is_dir():
-            folders = {x.name.lower()
-                       for x in path.iterdir() if x.is_dir()}
-            return "sys" in folders and "files" in folders and "&&systemdata" not in folders
-        return False
+    def add_partition(self, partition: Partition):
+        self.partitions.append(partition)
 
-    @staticmethod
-    def is_gcr_root(path: Union[Path, str]) -> bool:
-        path = Path(path)
-        if path.is_dir():
-            folders = {x.name.lower()
-                       for x in path.iterdir() if x.is_dir()}
-            return "&&systemdata" in folders
-        return False
+    def remove_partition(self, partition: Partition):
+        self.partitions.remove(partition)
 
-    def _read_nodes(self, fst, node: FSTNode, strTabOfs: int) -> FSTNode:
-        _type = read_ubyte(fst)
-        _nameOfs = int.from_bytes(fst.read(3), "big", signed=False)
-        _entryOfs = read_uint32(fst)
-        _size = read_uint32(fst)
+    def _load_from_path(self, path: Path, parentNode: FSTNode = None, ignoreList: tuple = ()):
+        for entry in sorted(path.iterdir(), key=lambda x: x.name.upper()):
+            if self.is_gcr_root() and entry.name.lower() == "&&systemdata":
+                continue
 
-        _oldpos = fst.tell()
-        node.name = read_string(fst, strTabOfs + _nameOfs)
-        fst.seek(_oldpos)
+            disable = False
+            for badPath in ignoreList:
+                if entry.match(badPath):
+                    disable = True
 
-        node._id = self._curEntry
+            if entry.is_file():
+                child = FSTFile(
+                    name=entry.name,
+                    size=entry.stat().st_size,
+                )
 
-        self._curEntry += 1
+                if parentNode is not None:
+                    parentNode.add_child(child)
 
-        if _type == FSTNode.FOLDER:
-            node.type = FSTNode.FOLDER
-            node._dirparent = _entryOfs
-            node._dirnext = _size
+                child.alignment = self._get_alignment(child)
+                child.position = self._get_location(child)
+                child._exclude = disable
+                child.size = entry.stat().st_size
 
-            while self._curEntry < _size:
-                child = self._read_nodes(fst, FSTNode.empty(), strTabOfs)
-                node.add_child(child)
-        else:
-            node.type = FSTNode.FILE
-            node.size = _size
-            node._fileoffset = _entryOfs
+            elif entry.is_dir():
+                child = FSTFolder(entry.name)
 
-        return node
+                if parentNode is not None:
+                    parentNode.add_child(child)
 
-    def _init_tables(self, config: Optional[Path] = None):
-        if not config:
-            self._alignmentTable = SortedDict()
-            self._locationTable = SortedDict()
-            self._excludeTable = SortedList()
-        elif isinstance(config, dict):
-            self._alignmentTable = SortedDict(config["alignment"])
-            self._locationTable = SortedDict(config["location"])
-            self._excludeTable = SortedList(config["exclude"])
-        else:
-            with config.open("r") as f:
-                data = json.load(f)
-            self._alignmentTable = SortedDict(data["alignment"])
-            self._locationTable = SortedDict(data["location"])
-            self._excludeTable = SortedList(data["exclude"])
+                self._load_from_path(entry, child, ignoreList=ignoreList)
+            else:
+                raise FSTInvalidNodeError("Not a dir or file")
 
     def _recursive_extract(self, node: FSTNode, dest: Path, iso: BinaryIO, dumpPositions: bool = False):
-        self.onPhysicalTaskDescribe(node.path)
+        self.onPhysicalTaskDescribe(node.absPath)
         if node.is_file():
             iso.seek(node._fileoffset)
             dest.write_bytes(iso.read(node.size))
@@ -256,71 +275,24 @@ class Partition(_ISOInfo):
             self.onPhysicalTaskComplete(0)
 
         if dumpPositions:
-            self._locationTable[node.path] = node._fileoffset
-
-    def _collect_size(self, size: int) -> int:
-        for node in self.children:
-            if self._get_excluded(node) is True or self._get_location(node) is not None:
-                continue
-
-            if node.is_file():
-                alignment = self._get_alignment(node)
-                size = align_int(size, alignment)
-                size += node.size
-            else:
-                size = node._collect_size(size)
-
-        return align_int(size, 4)
-
-    def _get_greatest_alignment(self) -> int:
-        try:
-            return self._alignmentTable.peekitem()[1]
-        except IndexError:
-            return 4
-
-    def _get_alignment(self, node: Union[FSTNode, str]) -> int:
-        if isinstance(node, FSTNode):
-            _path = node.path
-        else:
-            _path = node
-
-        alignment = 4
-        if self._alignmentTable is None:
-            return alignment
-
-        for entry, width in self._alignmentTable.items():
-            if fnmatch(_path, entry.strip()):
-                alignment = width
-                break
-
-        return alignment
-
-    def _get_location(self, node: Union[FSTNode, str]) -> int:
-        if isinstance(node, FSTNode):
-            _path = node.path
-        else:
-            _path = node
-
-        if self._locationTable:
-            return self._locationTable.get(_path)
-        return None
-
-    def _get_excluded(self, node: Union[FSTNode, str]) -> bool:
-        if isinstance(node, FSTNode):
-            _path = node.path
-        else:
-            _path = node
-
-        if self._excludeTable:
-            for entry in self._excludeTable:
-                if fnmatch(_path, entry.strip()):
-                    return True
-        return False
+            self._locationTable[node.absPath] = node._fileoffset
 
 
 class WiiISO():
 
     MaxSize = 4699979776
+
+    @classmethod
+    def from_root(cls, root: Path) -> BaseISO:
+        virtualISO = cls()
+        virtualISO.init_from_root(root)
+        return virtualISO
+
+    @classmethod
+    def from_iso(cls, iso: Path):
+        virtualISO = cls()
+        virtualISO.init_from_iso(iso)
+        return virtualISO
 
 
 class GamecubeISO():
@@ -332,9 +304,9 @@ class GamecubeISO():
         self.bnr: Optional[BNR] = None
 
     @classmethod
-    def from_root(cls, root: Path, genNewInfo: bool = False) -> GamecubeISO:
+    def from_root(cls, root: Path) -> BaseISO:
         virtualISO = cls()
-        virtualISO.init_from_root(root, genNewInfo)
+        virtualISO.init_from_root(root)
         return virtualISO
 
     @classmethod
@@ -342,16 +314,6 @@ class GamecubeISO():
         virtualISO = cls()
         virtualISO.init_from_iso(iso)
         return virtualISO
-
-    @staticmethod
-    def build_root(root: Path, dest: Union[Path, str] = None, genNewInfo: bool = False):
-        virtualISO = GamecubeISO.from_root(root, genNewInfo)
-        virtualISO.build(dest)
-
-    @staticmethod
-    def extract_iso(iso: Path, dest: Union[Path, str] = None):
-        virtualISO = GamecubeISO.from_iso(iso)
-        virtualISO.extract(dest)
 
     def build(self, dest: Union[Path, str] = None, preCalc: bool = True):
         self.onVirtualJobEnter(self.MaxSize)
@@ -426,7 +388,7 @@ class GamecubeISO():
             with Path(self.systemPath, "Game.toc").open("wb") as f:
                 f.write(self._rawFST.getvalue())
         else:
-            raise InvalidFSTError(f"{self.root} is not a valid root folder")
+            raise FSTInvalidError(f"{self.root} is not a valid root folder")
 
         # ------------ #
 
@@ -438,10 +400,10 @@ class GamecubeISO():
             self.save_system_datav(f, True)
 
             for child in self.rfiles(includedOnly=True):
-                self.onVirtualTaskDescribe(child.path)
+                self.onVirtualTaskDescribe(child.absPath)
                 f.write(b"\x00" * (child._fileoffset - f.tell()))
                 f.seek(child._fileoffset)
-                f.write((self.dataPath / child.path).read_bytes())
+                f.write((self.dataPath / child.absPath).read_bytes())
                 f.seek(0, 2)
                 self.onVirtualTaskComplete(child.datasize)
 
@@ -477,150 +439,6 @@ class GamecubeISO():
 
         self.onPhysicalJobExit(jobSize)
 
-    def extract_system_data(self, dest: Union[Path, str], blockEnterExitSignals: bool = False):
-        """
-        Extracts the system data of this virtual filesystem (ISO) to a path described by `dest`
-
-        `dest`: Where to extract the system data to
-        """
-        if isinstance(dest, str):
-            dest = Path(dest)
-
-        systemPath = dest / "sys"
-        systemPath.mkdir(parents=True, exist_ok=True)
-
-        self.save_system_data(
-            systemPath, blockEnterExitSignals=blockEnterExitSignals)
-
-    def save_system_data(self, dest: Optional[Union[Path, str]] = None, saveBNR: bool = False, blockEnterExitSignals: bool = False):
-        """
-        Saves system data to the sys folder of the current root.
-
-        `dest`: Path to store system data
-        `saveBNR`: Save the opening.bnr if applicable when `True`
-        """
-        if not blockEnterExitSignals:
-            jobSize = self._get_sys_size()
-            if self.bnr and saveBNR:
-                jobSize += len(self.bnr)
-            self.onPhysicalJobEnter(jobSize)
-
-        if not dest:
-            systemPath = self.systemPath
-        else:
-            systemPath = Path(dest)
-
-        if self.is_dolphin_root():
-            self.onPhysicalTaskDescribe("boot.bin")
-            with Path(systemPath, "boot.bin").open("wb") as f:
-                self.bootheader.save(f)
-            self.onPhysicalTaskComplete(0x440)
-
-            self.onPhysicalTaskDescribe("bi2.bin")
-            with Path(systemPath, "bi2.bin").open("wb") as f:
-                self.bootinfo.save(f)
-            self.onPhysicalTaskComplete(0x2000)
-
-            self.onPhysicalTaskDescribe("apploader.img")
-            with Path(systemPath, "apploader.img").open("wb") as f:
-                self.apploader.save(f)
-            self.onPhysicalTaskComplete(
-                self.apploader.loaderSize + self.apploader.trailerSize)
-
-            self.onPhysicalTaskDescribe("main.dol")
-            with Path(systemPath, "main.dol").open("wb") as f:
-                self.dol.save(f)
-            self.onPhysicalTaskComplete(self.dol.size)
-
-            self.onPhysicalTaskDescribe("fst.bin")
-            with Path(systemPath, "fst.bin").open("wb") as f:
-                f.write(self._rawFST.getvalue())
-            self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
-        elif self.is_gcr_root():
-            self.onPhysicalTaskDescribe("ISO.hdr")
-            with Path(systemPath, "ISO.hdr").open("wb") as f:
-                self.bootheader.save(f)
-                self.bootinfo.save(f)
-            self.onPhysicalTaskComplete(0x2440)
-
-            self.onPhysicalTaskDescribe("Apploader.ldr")
-            with Path(systemPath, "Apploader.ldr").open("wb") as f:
-                self.apploader.save(f)
-            self.onPhysicalTaskComplete(
-                self.apploader.loaderSize + self.apploader.trailerSize)
-
-            self.onPhysicalTaskDescribe("Start.dol")
-            with Path(systemPath, "Start.dol").open("wb") as f:
-                self.dol.save(f)
-            self.onPhysicalTaskComplete(self.dol.size)
-
-            self.onPhysicalTaskDescribe("Game.toc")
-            with Path(systemPath, "Game.toc").open("wb") as f:
-                f.write(self._rawFST.getvalue())
-            self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
-        else:
-            raise InvalidFSTError(f"{self.root} is not a valid root folder")
-
-        if self.bnr and saveBNR:
-            self.onPhysicalTaskDescribe("opening.bnr")
-            self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
-            self.onPhysicalTaskComplete(len(self.bnr))
-
-        self._save_config_regen()
-
-        if not blockEnterExitSignals:
-            self.onPhysicalJobExit(jobSize)
-
-    def save_system_datav(self, f: BinaryIO, blockEnterExitSignals: bool = False):
-        """
-        Save the system data to in the ISO header format to the binary stream `f`
-        """
-        jobSize = 0x2440 + (self.apploader.loaderSize +
-                            self.apploader.trailerSize)
-        jobSize += self.dol.size
-        jobSize += len(self._rawFST.getbuffer())
-
-        bnrNode = self.find_by_path("opening.bnr")
-        if bnrNode and self.bnr:
-            jobSize += len(self.bnr)
-
-        if not blockEnterExitSignals:
-            self.onVirtualJobEnter(jobSize)
-
-        self.onVirtualTaskDescribe("boot.bin")
-        self.bootheader.save(f)
-        self.onVirtualTaskComplete(0x440)
-
-        self.onVirtualTaskDescribe("bi2.bin")
-        self.bootinfo.save(f)
-        self.onVirtualTaskComplete(0x2000)
-
-        self.onVirtualTaskDescribe("apploader.img")
-        self.apploader.save(f)
-        self.onVirtualTaskComplete(
-            self.apploader.loaderSize + self.apploader.trailerSize)
-
-        self.onVirtualTaskDescribe("main.dol")
-        f.write(b"\x00" * (self.bootheader.dolOffset - f.tell()))  # Pad zeros
-        self.dol.save(f, self.bootheader.dolOffset)
-        self.onVirtualTaskComplete(self.dol.size)
-
-        self.onVirtualTaskDescribe("fst.bin")
-        f.seek(f.tell() + self.dol.size)
-        f.write(b"\x00" * (self.bootheader.fstOffset - f.tell()))  # Pad zeros
-        f.write(self._rawFST.getvalue())
-        self.onVirtualTaskComplete(len(self._rawFST.getbuffer()))
-
-        bnrNode = self.find_by_path("opening.bnr")
-        if bnrNode and self.bnr:
-            self.onVirtualTaskDescribe("opening.bnr")
-            f.seek(bnrNode._fileoffset)
-            f.write(self.bnr._rawdata.getvalue())
-            self.onVirtualTaskComplete(len(self.bnr))
-
-        if not blockEnterExitSignals:
-            self.onVirtualJobExit(jobSize)
-
     def get_auto_blob_size(self) -> int:
         _size = 0
 
@@ -653,7 +471,7 @@ class GamecubeISO():
 
         bnrNode = None
         for child in self.children:
-            if child.is_file() and fnmatch(child.path, "*opening.bnr"):
+            if child.is_file() and fnmatch(child.absPath, "*opening.bnr"):
                 bnrNode = child
                 break
 
@@ -670,7 +488,7 @@ class GamecubeISO():
         for node in self.nodes_by_offset():
             alignment = self._detect_alignment(node, prev)
             if alignment != 4:
-                self._alignmentTable[node.path] = alignment
+                self._alignmentTable[node.absPath] = alignment
             prev = node
 
     def init_from_root(self, root: Path, genNewInfo: bool = False):
@@ -699,7 +517,7 @@ class GamecubeISO():
             with Path(self.systemPath, "Apploader.ldr").open("rb") as f:
                 self.apploader = Apploader(f)
         else:
-            raise FileSystemInvalidError("Non Dolphin or GCR root type found")
+            raise PartitionInvalidError("Non Dolphin or GCR root type found")
 
         self.bootheader.dolOffset = (
             0x2440 + self.apploader.trailerSize + 0x1FFF) & -0x2000
@@ -713,7 +531,7 @@ class GamecubeISO():
         self.bootheader.fstMaxSize = self.bootheader.fstSize
 
         if ((self.bootheader.fstOffset + self.bootheader.fstSize + 0x3) & -0x4) + self.datasize > self.MaxSize:
-            raise FileSystemTooLargeError(
+            raise DiscTooLargeError(
                 f"{((self.bootheader.fstOffset + self.bootheader.fstSize + 0x3) & -0x4) + self.datasize} is larger than the max size of a GCM ({self.MaxSize})")
 
         if self.bootinfo.countryCode == BI2.Country.JAPAN:
@@ -775,203 +593,5 @@ class GamecubeISO():
         oldNode.destroy()
 
     ## FST HANDLING ##
-
-    def pre_calc_metadata(self, startpos: int):
-        """
-        Pre calculates all node offsets for viewing the node locations before compile
-
-        The results of this function are only valid until the FST is changed in
-        a way that impacts file offsets
-        """
-        _dataOfs = align_int(startpos, 4)
-        _curEntry = 1
-        _minOffset = self.MaxSize - 4
-        for child in self.rchildren():
-            if child.is_file() and child._position:
-                child._fileoffset = align_int(
-                    child._position, child._alignment)
-                if child._fileoffset < _minOffset:
-                    _minOffset = child._fileoffset
-
-            if child._exclude:
-                if child.is_file():
-                    child._fileoffset = 0
-                continue
-
-            child._id = _curEntry
-            _curEntry += 1
-
-            if child.is_file():
-                if not child._position:
-                    _dataOfs = align_int(_dataOfs, child._alignment)
-                    child._fileoffset = _dataOfs
-                    if child._fileoffset < _minOffset:
-                        _minOffset = child._fileoffset
-
-                    _dataOfs += child.size
-            else:
-                child._dirparent = child.parent._id
-                child._dirnext = child.size + child._id
-
-        self.bootheader.firstFileOffset = max(_minOffset, 0)
-
-    def load_file_system(self, path: Path, parentnode: FSTNode = None, ignoreList=None):
-        """
-        Converts a directory into an FST and loads into self for further use
-
-            path:       Path to input directory
-            parentnode: Parent to store all info under
-            ignorelist: List of filepaths to ignore as glob patterns
-        """
-        if ignoreList is None:
-            ignoreList = []
-
-        self._init_tables(self.configPath)
-
-        if len(self._excludeTable) > 0:
-            ignoreList.extend(self._excludeTable)
-
-        self._load_from_path(path, parentnode, ignoreList)
-        self.pre_calc_metadata(
-            (self.MaxSize - self.get_auto_blob_size()) & -self._get_greatest_alignment())
-
-    def load_file_systemv(self, fst: BinaryIO):
-        """
-        Loads the file system data from a memory buffer into self for further use
-
-            fst: BytesIO or opened file object containing the FST of an ISO
-        """
-
-        if fst.read(1) != b"\x01":
-            raise InvalidFSTError("Invalid Root flag found")
-        if fst.read(3) != b"\x00\x00\x00":
-            raise InvalidFSTError("Invalid Root string offset found")
-        if fst.read(4) != b"\x00\x00\x00\x00":
-            raise InvalidFSTError("Invalid Root offset found")
-
-        self._alignmentTable = SortedDict()
-        entryCount = read_uint32(fst)
-
-        self._curEntry = 1
-        while self._curEntry < entryCount:
-            child = self._read_nodes(fst, FSTNode.empty(), entryCount * 0xC)
-            self.add_child(child)
-
-    def load_config(self, path: Path):
-        if not path.is_file():
-            return
-
-        with path.open("r") as f:
-            data = json.load(f)
-
-        self._init_tables(data)
-
-        if "name" in data:  # convert legacy to new
-            self.bootheader.gameName = data["name"]
-            self.bootheader.gameCode = data["gameid"][:4]
-            self.bootheader.makerCode = data["gameid"][4:6]
-            self.bootheader.version = data["version"]
-
-            if self.bnr:
-                self.bnr.gameName = data["name"]
-                self.bnr.gameTitle = data["name"]
-                self.bnr.developerName = data["author"]
-                self.bnr.developerTitle = data["author"]
-                self.bnr.gameDescription = data["description"]
-
-            config = {"gamename": self.bootheader.gameName,
-                      "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
-                      "diskid": self.bootheader.diskID,
-                      "version": self.bootheader.version,
-                      "shortname": self.bnr.gameName if self.bnr else "",
-                      "longname": self.bnr.gameTitle if self.bnr else "",
-                      "devname": self.bnr.developerName if self.bnr else "",
-                      "devtitle": self.bnr.developerTitle if self.bnr else "",
-                      "description": self.bnr.gameDescription if self.bnr else "",
-                      "alignment": self._alignmentTable,
-                      "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
-                      "exclude": list(self._excludeTable)}
-            with path.open("w") as f:
-                json.dump(config, f, indent=4)
-        else:
-            self.bootheader.gameName = data["gamename"]
-            self.bootheader.gameCode = data["gameid"][:4]
-            self.bootheader.makerCode = data["gameid"][4:6]
-            self.bootheader.diskID = data["diskid"]
-            self.bootheader.version = data["version"]
-
-            if self.bnr:
-                self.bnr.gameName = data["shortname"]
-                self.bnr.gameTitle = data["longname"]
-                self.bnr.developerName = data["devname"]
-                self.bnr.developerTitle = data["devtitle"]
-                self.bnr.gameDescription = data["description"]
-
-    def save_config(self):
-        config = {"gamename": self.bootheader.gameName,
-                  "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
-                  "diskid": self.bootheader.diskID,
-                  "version": self.bootheader.version,
-                  "shortname": self.bnr.gameName,
-                  "longname": self.bnr.gameTitle,
-                  "devname": self.bnr.developerName if self.bnr else "",
-                  "devtitle": self.bnr.developerTitle if self.bnr else "",
-                  "description": self.bnr.gameDescription if self.bnr else "",
-                  "alignment": self._alignmentTable,
-                  "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
-                  "exclude": list(self._excludeTable)}
-
-        with self.configPath.open("w") as f:
-            json.dump(config, f, indent=4)
-
-    def _get_sys_size(self) -> int:
-        jobSize = 0x2440 + (self.apploader.loaderSize +
-                            self.apploader.trailerSize)
-        jobSize += self.dol.size
-        return jobSize + len(self._rawFST.getbuffer())
-
-    def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: tuple = ()):
-        for entry in sorted(path.iterdir(), key=lambda x: x.name.upper()):
-            if self.is_gcr_root() and entry.name.lower() == "&&systemdata":
-                continue
-
-            disable = False
-            for badPath in ignoreList:
-                if entry.match(badPath):
-                    disable = True
-
-            if entry.is_file():
-                child = FSTNode.file(
-                    entry.name, parent=parentnode, size=entry.stat().st_size)
-                child._alignment = self._get_alignment(child)
-                child._position = self._get_location(child)
-                child._exclude = disable
-                child.size = entry.stat().st_size
-
-            elif entry.is_dir():
-                child = FSTNode.folder(entry.name)
-
-                if parentnode is not None:
-                    parentnode.add_child(child)
-
-                self._load_from_path(entry, child, ignoreList=ignoreList)
-            else:
-                raise InvalidEntryError("Not a dir or file")
-
-    def _save_config_regen(self):
-        self._alignmentTable.clear()
-        self._locationTable.clear()
-        self._excludeTable.clear()
-
-        for node in self.rchildren():
-            if node.is_file():
-                if node._alignment != 4:
-                    self._alignmentTable[node.path] = node._alignment
-                if node._position:
-                    self._locationTable[node.path] = node._position
-            if node._exclude:
-                self._excludeTable.add(node.path)
-
-        self.save_config()
 
 # pylint: enable=not-callable

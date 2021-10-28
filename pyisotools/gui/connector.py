@@ -1178,7 +1178,7 @@ class Controller(QMainWindow):
 
                 if node.name == "opening.bnr":
                     self.iso.bnr = BNR(self.iso.dataPath /
-                                       item.node.fullPath, region=region)
+                                       item.node.absPath, region=region)
 
                 self.bnr_reset_info()
                 self.bnr_update_info()
