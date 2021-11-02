@@ -4,7 +4,7 @@ import json
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, Optional, Tuple, Union
+from typing import BinaryIO, Callable, Optional, Tuple, Union
 
 from dolreader.dol import DolFile
 from sortedcontainers import SortedDict, SortedList
@@ -15,14 +15,18 @@ from pyisotools.boot import Boot
 from pyisotools.fst import (FileSystemTable, FSTFile, FSTFolder,
                             FSTInvalidError, FSTInvalidNodeError, FSTNode)
 from pyisotools.iohelper import (align_int, read_string, read_ubyte,
-                                 read_uint32, write_uint32)
+                                 read_uint32, write_bool, write_uint32)
 
 
 class PartitionInvalidError(Exception):
     ...
 
 
-class Partition(FileSystemTable):
+class Partition():
+    """
+    Represents a GC/Wii partition, containing a system folder and file system
+    """
+
     def __init__(self, name: str):
         super().__init__()
 
@@ -34,12 +38,25 @@ class Partition(FileSystemTable):
         self.bootinfo: BI2 = None
         self.apploader: Apploader = None
         self.dol: DolFile = None
-        self._rawFST: BytesIO = None
+        self.fst: FileSystemTable = None
+        fsystemOut: BytesIO = None
 
         # FSTNode configurations
         self._alignmentTable = SortedDict()
         self._locationTable = SortedDict()
         self._excludeTable = SortedList()
+
+        # File extraction callbacks
+        self._onPhysicalJobEnter: Callable[[int], None] = None
+        self._onPhysicalTaskDescribe: Callable[[str], None] = None
+        self._onPhysicalTaskComplete: Callable[[int], None] = None
+        self._onPhysicalJobExit: Callable[[int], None] = None
+
+        # ISO build callbacks
+        self._onVirtualJobEnter: Callable[[int], None] = None
+        self._onVirtualTaskDescribe: Callable[[str], None] = None
+        self._onVirtualTaskComplete: Callable[[int], None] = None
+        self._onVirtualJobExit: Callable[[int], None] = None
 
         # Extraction state preservation
         self._curEntry = 0
@@ -50,7 +67,7 @@ class Partition(FileSystemTable):
     @property
     def systemPath(self) -> Path:
         if self.targetPath:
-            if Partition.is_gcr_root(self.targetPath):
+            if Partition.is_gcr_partition(self.targetPath):
                 return self.targetPath / "&&systemdata"
             return self.targetPath / "sys"
         return None
@@ -58,7 +75,7 @@ class Partition(FileSystemTable):
     @property
     def dataPath(self) -> Path:
         if self.targetPath:
-            if Partition.is_gcr_root(self.targetPath):
+            if Partition.is_gcr_partition(self.targetPath):
                 return self.targetPath
             return self.targetPath / self.name
         return None
@@ -76,7 +93,10 @@ class Partition(FileSystemTable):
         return None
 
     @staticmethod
-    def is_dolphin_root(path: Union[Path, str]) -> bool:
+    def is_dolphin_partition(path: Union[Path, str]) -> bool:
+        """
+        Check if `path` in the filesystem is structured for a dolphin style partition
+        """
         if path.is_dir():
             folders = {x.name.lower()
                        for x in path.iterdir() if x.is_dir()}
@@ -84,7 +104,10 @@ class Partition(FileSystemTable):
         return False
 
     @staticmethod
-    def is_gcr_root(path: Union[Path, str]) -> bool:
+    def is_gcr_partition(path: Union[Path, str]) -> bool:
+        """
+        Check if `path` in the filesystem is structured for a GCR style partition
+        """
         path = Path(path)
         if path.is_dir():
             folders = {x.name.lower()
@@ -93,10 +116,115 @@ class Partition(FileSystemTable):
         return False
 
     def get_sys_size(self) -> int:
-        jobSize = 0x2440 + (self.apploader.loaderSize +
-                            self.apploader.trailerSize)
-        jobSize += self.dol.size
-        return jobSize + len(self._rawFST.getbuffer())
+        """
+        Retrieve the size of sys in this partition
+        """
+        size = 0x2440 + (self.apploader.loaderSize +
+                         self.apploader.trailerSize)
+        size += self.dol.size
+        return size + self.fst.rawsize
+
+    def get_fs_size(self) -> int:
+        """
+        Retrieve the size of the files in this partition
+        """
+        return self.fst.datasize
+
+    def get_size(self) -> int:
+        """
+        Retrieve the size of the files and sys in this partition
+        """
+        return self.get_sys_size() + self.fst.datasize
+
+    def build(self, systemOut: BinaryIO, dataOut: BinaryIO, virtualAddress: int, preCalc: bool = True):
+        """
+        Build this partition into a virtual archive, writing system data to `systemOut` and filesystem data to `dataOut`
+
+        dataOut should come directly after the system data
+        
+        `virtualAddress` determines the location information of the nodes
+        """
+        partitionSize = self.get_size()
+        self.onVirtualJobEnter(partitionSize)
+
+        self.pre_calc_metadata(virtualAddress)
+
+        systemOut.seek(self.bootheader.fstOffset)
+        systemOut.write(b"\x01\x00\x00\x00\x00\x00\x00\x00")
+        write_uint32(systemOut, len(self))
+
+        _strOfs = 0
+        _strTableOfs = self.fst.num_children(enabledOnly=True) * 0xC
+        _minOffset = 0xFFFFFFFF
+        for child in self.fst.recurse_children(enabledOnly=True):
+            # Construct node in the raw FST
+            _parentID = _parentID
+            _childID = self._nodeInfoTable[child.absPath]
+            _rawName = _rawName
+            _position = child.position
+
+            write_bool(systemOut, child.is_dir())
+            systemOut.write((_strOfs).to_bytes(3, "big", signed=False))
+            write_uint32(
+                systemOut, _parentID if child.is_dir() else _position)
+            write_uint32(systemOut, len(child) +
+                         _childID if child.is_dir() else child.size)
+
+            _minOffset = min(_position, _minOffset)
+
+            _oldpos = systemOut.tell()
+            systemOut.seek(_strOfs + _strTableOfs)
+            systemOut.write(_rawName)
+            _strOfs += len(_rawName)
+            systemOut.seek(_oldpos)
+
+            # Write contents of this file to the binary stream
+            if child.is_file():
+                dataOut.seek(_position)
+                child.to_virtual(self.dataPath, dataOut)
+
+        systemOut.seek(0)
+        self.bootheader.fstSize = len(systemOut.read())
+        self.bootheader.fstMaxSize = self.bootheader.fstSize
+        self.bootheader.firstFileOffset = _minOffset
+
+        # ------------ #
+        # -- System -- #
+        # ------------ #
+
+        self.save_system_datav(self.systemPath, blockEnterExitSignals=True)
+
+        # ------------- #
+        # --- Files --- #
+        # ------------- #
+
+        # ------------- #
+
+        self.onVirtualJobExit(partitionSize)
+
+    def extract(self, dest: Optional[Union[Path, str]] = None, dumpPositions: bool = True):
+        """
+        Extracts the entire contents of this virtual partition to a path described by `dest`
+
+        `dest`: Where to extract the partition to. If None it will be the default root path
+        `dumpPositions`: If true, the position of every file will be dumped into the `.config.json`
+        """
+        jobSize = self.datasize + self._get_sys_size()
+        self.onPhysicalJobEnter(jobSize)
+
+        if dest is not None:
+            self.root = Path(f"{dest}/root")
+
+        # Create `root` and `files` folders
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.dataPath.mkdir(parents=True, exist_ok=True)
+
+        self.extract_system_data(self.systemPath, blockEnterExitSignals=True)
+        self.extract_path("", self.dataPath.parent,
+                          dumpPositions, blockEnterExitSignals=True)
+        self.save_config()
+
+        self.onPhysicalJobExit(jobSize)
 
     def load_config(self, path: Path):
         if not path.is_file():
@@ -182,17 +310,16 @@ class Partition(FileSystemTable):
         self.save_system_data(
             systemPath, blockEnterExitSignals=blockEnterExitSignals)
 
-    def save_system_data(self, dest: Optional[Union[Path, str]] = None, saveBNR: bool = False, blockEnterExitSignals: bool = False):
+    def save_system_data(self, dest: Optional[Union[Path, str]] = None, blockEnterExitSignals: bool = False):
         """
         Saves system data to the sys folder of the current root.
 
         `dest`: Path to store system data
         `saveBNR`: Save the opening.bnr if applicable when `True`
         """
+        
         if not blockEnterExitSignals:
-            jobSize = self._get_sys_size()
-            if self.bnr and saveBNR:
-                jobSize += len(self.bnr)
+            jobSize = self.get_sys_size()
             self.onPhysicalJobEnter(jobSize)
 
         if not dest:
@@ -200,7 +327,7 @@ class Partition(FileSystemTable):
         else:
             systemPath = Path(dest)
 
-        if self.is_dolphin_root():
+        if self.is_dolphin_partition():
             self.onPhysicalTaskDescribe("boot.bin")
             with Path(systemPath, "boot.bin").open("wb") as f:
                 self.bootheader.save(f)
@@ -224,9 +351,9 @@ class Partition(FileSystemTable):
 
             self.onPhysicalTaskDescribe("fst.bin")
             with Path(systemPath, "fst.bin").open("wb") as f:
-                f.write(self._rawFST.getvalue())
-            self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
-        elif self.is_gcr_root():
+                self.fst.to_virtual(f)
+            self.onPhysicalTaskComplete(self.fst.rawsize)
+        elif self.is_gcr_partition():
             self.onPhysicalTaskDescribe("ISO.hdr")
             with Path(systemPath, "ISO.hdr").open("wb") as f:
                 self.bootheader.save(f)
@@ -246,15 +373,10 @@ class Partition(FileSystemTable):
 
             self.onPhysicalTaskDescribe("Game.toc")
             with Path(systemPath, "Game.toc").open("wb") as f:
-                f.write(self._rawFST.getvalue())
-            self.onPhysicalTaskComplete(len(self._rawFST.getbuffer()))
+                self.fst.to_virtual(f)
+            self.onPhysicalTaskComplete(self.fst.rawsize)
         else:
             raise FSTInvalidError(f"{self.root} is not a valid root folder")
-
-        if self.bnr and saveBNR:
-            self.onPhysicalTaskDescribe("opening.bnr")
-            self.bnr.save_bnr(Path(self.dataPath, "opening.bnr"))
-            self.onPhysicalTaskComplete(len(self.bnr))
 
         self._save_config_regen()
 
@@ -265,16 +387,9 @@ class Partition(FileSystemTable):
         """
         Save the system data to in the ISO header format to the binary stream `f`
         """
-        jobSize = 0x2440 + (self.apploader.loaderSize +
-                            self.apploader.trailerSize)
-        jobSize += self.dol.size
-        jobSize += len(self._rawFST.getbuffer())
-
-        bnrNode = self.find_by_path("opening.bnr")
-        if bnrNode and self.bnr:
-            jobSize += len(self.bnr)
 
         if not blockEnterExitSignals:
+            jobSize = self.get_sys_size()
             self.onVirtualJobEnter(jobSize)
 
         self.onVirtualTaskDescribe("boot.bin")
@@ -298,18 +413,97 @@ class Partition(FileSystemTable):
         self.onVirtualTaskDescribe("fst.bin")
         f.seek(f.tell() + self.dol.size)
         f.write(b"\x00" * (self.bootheader.fstOffset - f.tell()))  # Pad zeros
-        f.write(self._rawFST.getvalue())
-        self.onVirtualTaskComplete(len(self._rawFST.getbuffer()))
-
-        bnrNode = self.find_by_path("opening.bnr")
-        if bnrNode and self.bnr:
-            self.onVirtualTaskDescribe("opening.bnr")
-            f.seek(bnrNode._fileoffset)
-            f.write(self.bnr._rawdata.getvalue())
-            self.onVirtualTaskComplete(len(self.bnr))
+        self.fst.to_virtual(f)
+        self.onVirtualTaskComplete(self.fst.rawsize)
 
         if not blockEnterExitSignals:
             self.onVirtualJobExit(jobSize)
+
+    # pylint: disable=unused-argument
+    @staticmethod
+    def __default_callback(*args, **kwargs) -> None:
+        return None
+    # pylint: enable=unused-argument
+
+    @property
+    def onPhysicalJobEnter(self) -> Callable[[int], None]:
+        if self._onPhysicalJobEnter:
+            return self._onPhysicalJobEnter
+        return self.__default_callback
+
+    @onPhysicalJobEnter.setter
+    def onPhysicalJobEnter(self, callback: Callable[[int], None]):
+        self._onPhysicalJobEnter = callback
+
+    @property
+    def onPhysicalTaskDescribe(self) -> Callable[[str], None]:
+        if self._onPhysicalTaskDescribe:
+            return self._onPhysicalTaskDescribe
+        return self.__default_callback
+
+    @onPhysicalTaskDescribe.setter
+    def onPhysicalTaskDescribe(self, callback: Callable[[str], None]):
+        self._onPhysicalTaskDescribe = callback
+
+    @property
+    def onPhysicalTaskComplete(self) -> Callable[[int], None]:
+        if self._onPhysicalTaskComplete:
+            return self._onPhysicalTaskComplete
+        return self.__default_callback
+
+    @onPhysicalTaskComplete.setter
+    def onPhysicalTaskComplete(self, callback: Callable[[int], None]):
+        self._onPhysicalTaskComplete = callback
+
+    @property
+    def onPhysicalJobExit(self) -> Callable[[int], None]:
+        if self._onPhysicalJobExit:
+            return self._onPhysicalJobExit
+        return self.__default_callback
+
+    @onPhysicalJobExit.setter
+    def onPhysicalJobExit(self, callback: Callable[[int], None]):
+        self._onPhysicalJobExit = callback
+
+    @property
+    def onVirtualJobEnter(self) -> Callable[[int], None]:
+        if self._onVirtualJobEnter:
+            return self._onVirtualJobEnter
+        return self.__default_callback
+
+    @onVirtualJobEnter.setter
+    def onVirtualJobEnter(self, callback: Callable[[int], None]):
+        self._onVirtualJobEnter = callback
+
+    @property
+    def onVirtualTaskDescribe(self) -> Callable[[str], None]:
+        if self._onVirtualTaskDescribe:
+            return self._onVirtualTaskDescribe
+        return self.__default_callback
+
+    @onVirtualTaskDescribe.setter
+    def onVirtualTaskDescribe(self, callback: Callable[[str], None]):
+        self._onVirtualTaskDescribe = callback
+
+    @property
+    def onVirtualTaskComplete(self) -> Callable[[int], None]:
+        if self._onVirtualTaskComplete:
+            return self._onVirtualTaskComplete
+        return self.__default_callback
+
+    @onVirtualTaskComplete.setter
+    def onVirtualTaskComplete(self, callback: Callable[[int], None]):
+        self._onVirtualTaskComplete = callback
+
+    @property
+    def onVirtualJobExit(self) -> Callable[[int], None]:
+        if self._onVirtualJobExit:
+            return self._onVirtualJobExit
+        return self.__default_callback
+
+    @onVirtualJobExit.setter
+    def onVirtualJobExit(self, callback: Callable[[int], None]):
+        self._onVirtualJobExit = callback
 
     def _read_nodes(self, fst, parent: FSTFolder, strTabOfs: int) -> FSTNode:
         _type = read_ubyte(fst)
@@ -423,16 +617,9 @@ class Partition(FileSystemTable):
         a way that impacts file offsets
         """
         _dataOfs = align_int(startPos, 4)
-        _curEntry = 1
         _minOffset = endPos - 4
-        for child in self.recurse_children():
-            if not child.is_active():
-                if child.is_file():
-                    child.position = 0
-                continue
-
+        for _curEntry, child in enumerate(self.recurse_children(enabledOnly=True), 1):
             self._nodeInfoTable[child.absPath] = _curEntry
-            _curEntry += 1
 
             if child.is_file():
                 if child.has_manual_position():
@@ -442,11 +629,6 @@ class Partition(FileSystemTable):
                     child.position = _dataOfs
                     _minOffset = min(_dataOfs, _minOffset)
                     _dataOfs += child.size
-            else:
-                child._dirparent = child.parent._id
-                child._dirnext = child.size + child._id
-
-        self.bootheader.firstFileOffset = max(_minOffset, 0)
 
     def _load_from_path(self, path: Path, parentnode: FSTNode = None, ignoreList: Optional[Tuple] = None):
         if ignoreList is None:
@@ -454,7 +636,7 @@ class Partition(FileSystemTable):
 
         # Uppercase bound sort
         for entry in sorted(path.iterdir(), key=lambda x: x.name.upper()):
-            if self.is_gcr_root() and entry.name.lower() == "&&systemdata":
+            if self.is_gcr_partition() and entry.name.lower() == "&&systemdata":
                 continue
 
             active = True

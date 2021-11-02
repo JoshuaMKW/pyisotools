@@ -33,18 +33,6 @@ class BaseISO(ABC):
         super().__init__()
         self.partitions: Dict[str, Partition] = {}
 
-        # File extraction callbacks
-        self._onPhysicalJobEnter: Callable[[int], None] = None
-        self._onPhysicalTaskDescribe: Callable[[str], None] = None
-        self._onPhysicalTaskComplete: Callable[[int], None] = None
-        self._onPhysicalJobExit: Callable[[int], None] = None
-
-        # ISO build callbacks
-        self._onVirtualJobEnter: Callable[[int], None] = None
-        self._onVirtualTaskDescribe: Callable[[str], None] = None
-        self._onVirtualTaskComplete: Callable[[int], None] = None
-        self._onVirtualJobExit: Callable[[int], None] = None
-
     @staticmethod
     def get_auto_data_size(partition: Partition) -> int:
         _size = 0
@@ -135,92 +123,6 @@ class BaseISO(ABC):
 
         oldNode.parent.add_child(newNode)
         oldNode.destroy()
-
-    # pylint: disable=unused-argument
-    @staticmethod
-    def __default_callback(*args, **kwargs) -> None:
-        return None
-    # pylint: enable=unused-argument
-
-    @property
-    def onPhysicalJobEnter(self) -> Callable[[int], None]:
-        if self._onPhysicalJobEnter:
-            return self._onPhysicalJobEnter
-        return self.__default_callback
-
-    @onPhysicalJobEnter.setter
-    def onPhysicalJobEnter(self, callback: Callable[[int], None]):
-        self._onPhysicalJobEnter = callback
-
-    @property
-    def onPhysicalTaskDescribe(self) -> Callable[[str], None]:
-        if self._onPhysicalTaskDescribe:
-            return self._onPhysicalTaskDescribe
-        return self.__default_callback
-
-    @onPhysicalTaskDescribe.setter
-    def onPhysicalTaskDescribe(self, callback: Callable[[str], None]):
-        self._onPhysicalTaskDescribe = callback
-
-    @property
-    def onPhysicalTaskComplete(self) -> Callable[[int], None]:
-        if self._onPhysicalTaskComplete:
-            return self._onPhysicalTaskComplete
-        return self.__default_callback
-
-    @onPhysicalTaskComplete.setter
-    def onPhysicalTaskComplete(self, callback: Callable[[int], None]):
-        self._onPhysicalTaskComplete = callback
-
-    @property
-    def onPhysicalJobExit(self) -> Callable[[int], None]:
-        if self._onPhysicalJobExit:
-            return self._onPhysicalJobExit
-        return self.__default_callback
-
-    @onPhysicalJobExit.setter
-    def onPhysicalJobExit(self, callback: Callable[[int], None]):
-        self._onPhysicalJobExit = callback
-
-    @property
-    def onVirtualJobEnter(self) -> Callable[[int], None]:
-        if self._onVirtualJobEnter:
-            return self._onVirtualJobEnter
-        return self.__default_callback
-
-    @onVirtualJobEnter.setter
-    def onVirtualJobEnter(self, callback: Callable[[int], None]):
-        self._onVirtualJobEnter = callback
-
-    @property
-    def onVirtualTaskDescribe(self) -> Callable[[str], None]:
-        if self._onVirtualTaskDescribe:
-            return self._onVirtualTaskDescribe
-        return self.__default_callback
-
-    @onVirtualTaskDescribe.setter
-    def onVirtualTaskDescribe(self, callback: Callable[[str], None]):
-        self._onVirtualTaskDescribe = callback
-
-    @property
-    def onVirtualTaskComplete(self) -> Callable[[int], None]:
-        if self._onVirtualTaskComplete:
-            return self._onVirtualTaskComplete
-        return self.__default_callback
-
-    @onVirtualTaskComplete.setter
-    def onVirtualTaskComplete(self, callback: Callable[[int], None]):
-        self._onVirtualTaskComplete = callback
-
-    @property
-    def onVirtualJobExit(self) -> Callable[[int], None]:
-        if self._onVirtualJobExit:
-            return self._onVirtualJobExit
-        return self.__default_callback
-
-    @onVirtualJobExit.setter
-    def onVirtualJobExit(self, callback: Callable[[int], None]):
-        self._onVirtualJobExit = callback
 
     def add_partition(self, partition: Partition):
         self.partitions.append(partition)

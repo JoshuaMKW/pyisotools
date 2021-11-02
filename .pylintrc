@@ -251,6 +251,7 @@ good-names=f,
            j,
            k,
            n,
+           io,
            ex,
            Run,
            _
