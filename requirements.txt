@@ -6,3 +6,5 @@ sortedcontainers
 pillow
 pygithub
 PySide2
+pycryptodome
+pycryptodome-test-vectors

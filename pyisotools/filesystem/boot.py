@@ -1,29 +1,31 @@
 from __future__ import annotations
+from enum import IntEnum
 
 from io import BytesIO
+from typing import BinaryIO
 
-from pyisotools.iohelper import (read_string, read_ubyte, read_uint32,
-                                 write_ubyte, write_uint32)
+from pyisotools.tools import (read_bool, read_string, read_ubyte, read_uint32,
+                              write_bool, write_ubyte, write_uint32)
 
 
 class Boot():
 
-    class Country:
+    class Country(IntEnum):
         JAPAN = 0
         AMERICA = 1
         PAL = 2
         KOREA = 0
 
-    class Type:
+    class Type(IntEnum):
         GCN = 0
         WII = 1
         UNKNOWN = -1
 
-    class Magic:
+    class Magic(IntEnum):
         GCNMAGIC = 0xC2339F3D
         WIIMAGIC = 0x5D1C9EA3
 
-    def __init__(self, f):
+    def __init__(self, f: BinaryIO):
         self._rawdata = BytesIO(f.read(0x440))
 
     @property
@@ -67,12 +69,12 @@ class Boot():
     @property
     def audioStreaming(self) -> bool:
         self._rawdata.seek(8)
-        return bool(self._rawdata.read(1))
+        return read_bool(self._rawdata)
 
     @audioStreaming.setter
     def audioStreaming(self, active: bool):
         self._rawdata.seek(8)
-        self._rawdata.write(b"\x01" if active is True else b"\x00")
+        write_bool(self._rawdata, active)
 
     @property
     def streamBufferSize(self) -> int:
@@ -108,12 +110,32 @@ class Boot():
 
     @property
     def gameName(self) -> str:
-        return read_string(self._rawdata, 0x20, 0x3E0)
+        return read_string(self._rawdata, 0x20, 0x40)
 
     @gameName.setter
     def gameName(self, name: str):
         self._rawdata.seek(0x20)
-        self._rawdata.write(name[:0x3E0].encode("ascii"))
+        self._rawdata.write(name[:0x40].encode())
+
+    @property
+    def hashVerificationDisabled(self) -> bool:
+        self._rawdata.seek(0x60)
+        return read_bool(self._rawdata)
+
+    @hashVerificationDisabled.setter
+    def hashVerificationDisabled(self, disable: bool):
+        self._rawdata.seek(0x60)
+        return write_bool(self._rawdata, disable)
+
+    @property
+    def discEncryptionDisabled(self) -> bool:
+        self._rawdata.seek(0x61)
+        return read_bool(self._rawdata)
+
+    @discEncryptionDisabled.setter
+    def discEncryptionDisabled(self, disable: bool):
+        self._rawdata.seek(0x61)
+        return write_bool(self._rawdata, disable)
 
     @property
     def debugMonitorOffset(self) -> int:

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 from argparse import ArgumentParser
+from enum import Enum
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
 from typing import Union
 
 from PIL import Image
-
-from pyisotools.iohelper import read_string
+from pyisotools.tools import read_string
 
 
 def io_preserve(func):
@@ -22,7 +22,7 @@ def io_preserve(func):
     return wrapper
 
 
-class Jobs:
+class Jobs(Enum):
     COMPILE = "COMPILE"
     EXTRACT = "EXTRACT"
 

@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import json
+from enum import IntEnum
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO, Callable, Optional, Tuple, Union
 
 from dolreader.dol import DolFile
-from sortedcontainers import SortedDict, SortedList
-
 from pyisotools.apploader import Apploader
 from pyisotools.bi2 import BI2
 from pyisotools.boot import Boot
-from pyisotools.fst import (FileSystemTable, FSTFile, FSTFolder,
-                            FSTInvalidError, FSTInvalidNodeError, FSTNode)
-from pyisotools.iohelper import (align_int, read_string, read_ubyte,
-                                 read_uint32, write_bool, write_uint32)
+from pyisotools.filesystem.fst import (FileSystemTable, FSTFile, FSTFolder,
+                                       FSTInvalidError, FSTInvalidNodeError,
+                                       FSTNode, GlobBlackList)
+from pyisotools.tools import (align_int, read_string, read_ubyte, read_uint32,
+                              write_bool, write_uint32)
+from sortedcontainers import SortedDict, SortedList
 
 
 class PartitionInvalidError(Exception):
@@ -24,12 +25,15 @@ class PartitionInvalidError(Exception):
 
 class Partition():
     """
-    Represents a GC/Wii partition, containing a system folder and file system
+    Represents a GC/Wii partition, containing a system folder and file tree
     """
 
-    def __init__(self, name: str):
-        super().__init__()
+    class Type(IntEnum):
+        DATA = 0
+        UPDATE = 1
+        CHANNEL = 2
 
+    def __init__(self, name: str):
         self.name = name
 
         # System components
@@ -39,12 +43,11 @@ class Partition():
         self.apploader: Apploader = None
         self.dol: DolFile = None
         self.fst: FileSystemTable = None
-        fsystemOut: BytesIO = None
 
         # FSTNode configurations
-        self._alignmentTable = SortedDict()
-        self._locationTable = SortedDict()
-        self._excludeTable = SortedList()
+        self.alignmentTable = SortedDict()
+        self.locationTable = SortedDict()
+        self.excludeTable = SortedList()
 
         # File extraction callbacks
         self._onPhysicalJobEnter: Callable[[int], None] = None
@@ -63,6 +66,99 @@ class Partition():
         self._strOfs = 0
         self._dataOfs = 0
         self._prevfile = None
+
+    @staticmethod
+    def is_dolphin_partition(path: Union[Path, str]) -> bool:
+        """
+        Check if `path` in the filesystem is structured for a dolphin style partition
+        """
+        if path.is_dir():
+            folders = {x.name.lower()
+                       for x in path.iterdir() if x.is_dir()}
+            return "sys" in folders and "files" in folders and "&&systemdata" not in folders
+        return False
+
+    @staticmethod
+    def is_gcr_partition(path: Union[Path, str]) -> bool:
+        """
+        Check if `path` in the filesystem is structured for a GCR style partition
+        """
+        path = Path(path)
+        if path.is_dir():
+            folders = {x.name.lower()
+                       for x in path.iterdir() if x.is_dir()}
+            return "&&systemdata" in folders
+        return False
+
+    @classmethod
+    def from_physical(cls, path: Union[Path, str]) -> Partition:
+        """
+        Converts a physical path in the filesystem described by `path` into a `Partition`
+        """
+        if isinstance(path, str):
+            dst = Path(path)
+
+        partition = cls()
+        partition.targetPath = path
+
+        sysPath = path / "sys"
+        if Partition.is_dolphin_partition(path):
+            with Path(sysPath, "boot.bin").open("rb") as f:
+                partition.bootheader = Boot(f)
+            with Path(sysPath, "bi2.bin").open("rb") as f:
+                partition.bootinfo = BI2(f)
+            with Path(sysPath, "apploader.img").open("rb") as f:
+                partition.apploader = Apploader(f)
+            with Path(sysPath, "main.dol").open("rb") as f:
+                partition.dol = DolFile(f)
+        else:
+            with Path(sysPath, "ISO.hdr").open("rb") as f:
+                partition.bootheader = Boot(f)
+                partition.bootinfo = BI2(f)
+            with Path(sysPath, "Apploader.ldr").open("rb") as f:
+                partition.apploader = Apploader(f)
+            with Path(sysPath, "Start.dol").open("rb") as f:
+                partition.dol = DolFile(f)
+
+        if partition.has_config():
+            partition.load_config(partition.configPath)
+
+        blacklist = GlobBlackList(partition.dataPath, partition.excludeTable)
+        partition.fst = FileSystemTable.from_physical(
+            partition.dataPath, blacklist)
+
+    @classmethod
+    def from_virtual(cls, partition: BinaryIO, isRaw: bool) -> FileSystemTable:
+        """
+        Loads the partition data from a memory buffer into a `Partition`
+
+        `isRaw`: Does this partition have no header information (GCN)?
+        """
+        partition = cls()
+
+           with Path(sysPath, "boot.bin").open("rb") as f:
+                partition.bootheader = Boot(f)
+            with Path(sysPath, "bi2.bin").open("rb") as f:
+                partition.bootinfo = BI2(f)
+            with Path(sysPath, "apploader.img").open("rb") as f:
+                partition.apploader = Apploader(f)
+            with Path(sysPath, "main.dol").open("rb") as f:
+                partition.dol = DolFile(f)
+
+            with Path(sysPath, "ISO.hdr").open("rb") as f:
+                partition.bootheader = Boot(f)
+                partition.bootinfo = BI2(f)
+            with Path(sysPath, "Apploader.ldr").open("rb") as f:
+                partition.apploader = Apploader(f)
+            with Path(sysPath, "Start.dol").open("rb") as f:
+                partition.dol = DolFile(f)
+
+        if partition.has_config():
+            partition.load_config(partition.configPath)
+
+        blacklist = GlobBlackList(partition.dataPath, partition.excludeTable)
+        partition.fst = FileSystemTable.from_physical(
+            partition.dataPath, blacklist)
 
     @property
     def systemPath(self) -> Path:
@@ -92,29 +188,6 @@ class Partition():
             return self.dataPath / "opening.bnr"
         return None
 
-    @staticmethod
-    def is_dolphin_partition(path: Union[Path, str]) -> bool:
-        """
-        Check if `path` in the filesystem is structured for a dolphin style partition
-        """
-        if path.is_dir():
-            folders = {x.name.lower()
-                       for x in path.iterdir() if x.is_dir()}
-            return "sys" in folders and "files" in folders and "&&systemdata" not in folders
-        return False
-
-    @staticmethod
-    def is_gcr_partition(path: Union[Path, str]) -> bool:
-        """
-        Check if `path` in the filesystem is structured for a GCR style partition
-        """
-        path = Path(path)
-        if path.is_dir():
-            folders = {x.name.lower()
-                       for x in path.iterdir() if x.is_dir()}
-            return "&&systemdata" in folders
-        return False
-
     def get_sys_size(self) -> int:
         """
         Retrieve the size of sys in this partition
@@ -136,12 +209,18 @@ class Partition():
         """
         return self.get_sys_size() + self.fst.datasize
 
+    def has_config(self) -> bool:
+        """
+        Returns if this partition has a file system config
+        """
+        return ".config.json" in [node.name.lower() for node in self.systemPath.iterdir()]
+
     def build(self, systemOut: BinaryIO, dataOut: BinaryIO, virtualAddress: int, preCalc: bool = True):
         """
         Build this partition into a virtual archive, writing system data to `systemOut` and filesystem data to `dataOut`
 
         dataOut should come directly after the system data
-        
+
         `virtualAddress` determines the location information of the nodes
         """
         partitionSize = self.get_size()
@@ -246,9 +325,9 @@ class Partition():
                   "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
                   "diskid": self.bootheader.diskID,
                   "version": self.bootheader.version,
-                  "alignment": self._alignmentTable,
-                  "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
-                  "exclude": list(self._excludeTable)}
+                  "alignment": self.alignmentTable,
+                  "location": {k: self.locationTable[k] for k in sorted(self.locationTable, key=str.upper)},
+                  "exclude": list(self.excludeTable)}
 
         with self.configPath.open("w") as f:
             json.dump(config, f, indent=4)
@@ -266,8 +345,8 @@ class Partition():
 
         self._init_tables(self.configPath)
 
-        if len(self._excludeTable) > 0:
-            ignoreList.extend(self._excludeTable)
+        if len(self.excludeTable) > 0:
+            ignoreList.extend(self.excludeTable)
 
         self._load_from_path(path, parentnode, ignoreList)
         self.pre_calc_metadata(
@@ -287,7 +366,7 @@ class Partition():
         if fst.read(4) != b"\x00\x00\x00\x00":
             raise FSTInvalidError("Invalid Root offset found")
 
-        self._alignmentTable = SortedDict()
+        self.alignmentTable = SortedDict()
         entryCount = read_uint32(fst)
 
         self._curEntry = 1
@@ -317,7 +396,7 @@ class Partition():
         `dest`: Path to store system data
         `saveBNR`: Save the opening.bnr if applicable when `True`
         """
-        
+
         if not blockEnterExitSignals:
             jobSize = self.get_sys_size()
             self.onPhysicalJobEnter(jobSize)
@@ -536,19 +615,19 @@ class Partition():
 
     def _init_tables(self, config: Optional[Path] = None):
         if not config:
-            self._alignmentTable = SortedDict()
-            self._locationTable = SortedDict()
-            self._excludeTable = SortedList()
+            self.alignmentTable = SortedDict()
+            self.locationTable = SortedDict()
+            self.excludeTable = SortedList()
         elif isinstance(config, dict):
-            self._alignmentTable = SortedDict(config["alignment"])
-            self._locationTable = SortedDict(config["location"])
-            self._excludeTable = SortedList(config["exclude"])
+            self.alignmentTable = SortedDict(config["alignment"])
+            self.locationTable = SortedDict(config["location"])
+            self.excludeTable = SortedList(config["exclude"])
         else:
             with config.open("r") as f:
                 data = json.load(f)
-            self._alignmentTable = SortedDict(data["alignment"])
-            self._locationTable = SortedDict(data["location"])
-            self._excludeTable = SortedList(data["exclude"])
+            self.alignmentTable = SortedDict(data["alignment"])
+            self.locationTable = SortedDict(data["location"])
+            self.excludeTable = SortedList(data["exclude"])
 
     def _collect_size(self, size: int) -> int:
         for node in self.children:
@@ -566,7 +645,7 @@ class Partition():
 
     def _get_greatest_alignment(self) -> int:
         try:
-            return self._alignmentTable.peekitem()[1]
+            return self.alignmentTable.peekitem()[1]
         except IndexError:
             return 4
 
@@ -577,10 +656,10 @@ class Partition():
             _path = node
 
         alignment = 4
-        if self._alignmentTable is None:
+        if self.alignmentTable is None:
             return alignment
 
-        for entry, width in self._alignmentTable.items():
+        for entry, width in self.alignmentTable.items():
             if fnmatch(_path, entry.strip()):
                 alignment = width
                 break
@@ -593,8 +672,8 @@ class Partition():
         else:
             _path = node
 
-        if self._locationTable:
-            return self._locationTable.get(_path)
+        if self.locationTable:
+            return self.locationTable.get(_path)
         return None
 
     def _get_excluded(self, node: Union[FSTNode, str]) -> bool:
@@ -603,8 +682,8 @@ class Partition():
         else:
             _path = node
 
-        if self._excludeTable:
-            for entry in self._excludeTable:
+        if self.excludeTable:
+            for entry in self.excludeTable:
                 if fnmatch(_path, entry.strip()):
                     return True
         return False
@@ -662,17 +741,17 @@ class Partition():
                 raise FSTInvalidNodeError("Not a dir or file")
 
     def _save_config_regen(self):
-        self._alignmentTable.clear()
-        self._locationTable.clear()
-        self._excludeTable.clear()
+        self.alignmentTable.clear()
+        self.locationTable.clear()
+        self.excludeTable.clear()
 
         for node in self.recurse_children():
             if node.is_file():
                 if node.alignment != 4:
-                    self._alignmentTable[node.absPath] = node.alignment
+                    self.alignmentTable[node.absPath] = node.alignment
                 if node.position:
-                    self._locationTable[node.absPath] = node.position
+                    self.locationTable[node.absPath] = node.position
             if not node.is_active():
-                self._excludeTable.add(node.absPath)
+                self.excludeTable.add(node.absPath)
 
         self.save_config()

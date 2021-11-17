@@ -4,6 +4,13 @@ from typing import BinaryIO, Optional
 from chardet import UniversalDetector
 
 
+# pylint: disable=invalid-name
+class classproperty(property):
+    def __get__(self, cls, owner):
+        return classmethod(self.fget).__get__(None, owner)()
+# pylint: enable=invalid-name
+
+
 def read_sbyte(f: BinaryIO):
     return struct.unpack("b", f.read(1))[0]
 

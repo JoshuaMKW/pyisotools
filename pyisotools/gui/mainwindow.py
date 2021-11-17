@@ -15,7 +15,7 @@ from PySide2.QtGui import QFont, QIcon
 from PySide2.QtWidgets import *
 
 from . import icons_rc
-from .customwidgets import FilteredPlainTextEdit
+from pyisotools.gui.items.extended import FilteredPlainTextEdit
 
 class Ui_MainWindow():
     def setupUi(self, MainWindow):

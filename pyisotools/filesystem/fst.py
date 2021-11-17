@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import (BinaryIO, Dict, Iterable, List, Optional, TextIO, Tuple,
                     Union)
 
-from .iohelper import read_string, read_ubyte, read_uint32, write_uint32
+from pyisotools.tools import classproperty, read_string, read_ubyte, read_uint32, write_uint32
 
 
 def _round_up_to_power_of_2(n):
@@ -43,11 +43,17 @@ class FSTClobberedParentError(FSTInvalidNodeError):
     ...
 
 
-# pylint: disable=invalid-name
-class classproperty(property):
-    def __get__(self, cls, owner):
-        return classmethod(self.fget).__get__(None, owner)()
-# pylint: enable=invalid-name
+class GlobBlackList():
+    def __init__(self, basePath: str, globList: List[str]):
+        self.base = basePath
+        self.globs = globList
+
+    def is_matching(self, path: Path) -> bool:
+        """
+        Return if the path matches any of the globs in this blacklist
+        """
+        relpath = path.relative_to(self.base)
+        return any([fnmatch(relpath, _glob) for _glob in self.globs])
 
 
 class FSTNode(ABC):
@@ -75,7 +81,8 @@ class FSTNode(ABC):
 
     @classmethod
     @abstractmethod
-    def from_path(cls, path: Union[str, Path]) -> FSTNode: ...
+    def from_path(cls, path: Union[Path, str],
+                  blacklist: Optional[GlobBlackList] = None) -> FSTNode: ...
 
     @classproperty
     @abstractmethod
@@ -204,7 +211,7 @@ class FSTFile(FSTNode):
                 FSTNode._PositionInfo(0, offset), True)
 
     @classmethod
-    def from_path(cls, path: Union[Path, str]) -> FSTNode:
+    def from_path(cls, path: Union[Path, str], blacklist: Optional[GlobBlackList] = None) -> FSTNode:
         if isinstance(path, str):
             path = Path(str)
 
@@ -359,42 +366,6 @@ class FSTFile(FSTNode):
         return False
 
 
-class FSTFileIO(BytesIO, FSTFile):
-    alignment: int
-    position: int
-
-    def __init__(self, name: str, data: Union[bytes, BinaryIO], alignment: int = 4, offset: Optional[int] = None, active: bool = True):
-        if isinstance(data, (RawIOBase, BufferedIOBase)):
-            super(BytesIO, self).__init__(data.read())
-        else:
-            super(BytesIO, self).__init__(data)
-
-        self.name = name
-        self._alignment = alignment
-        self._positionInfo: Tuple[int, bool] = tuple(
-            offset, offset is not None)
-        self._active = active
-
-    @classmethod
-    def from_path(cls, path: Union[str, Path]) -> FSTNode:
-        if isinstance(path, str):
-            path = Path(str)
-
-        if not path.is_file():
-            error = "a non file" if path.exists() else "a file that doesn't exist"
-            raise NotImplementedError(
-                f"Initializing an {cls.__name__} using {error} is not allowed")
-
-        node = cls(path.name, data=path.read_bytes())
-        return node
-
-    def __len__(self) -> int:
-        return len(self.getvalue())
-
-    def __contains__(self, other: Union[FSTNode, Path]) -> bool:
-        return False
-
-
 class FSTFolder(FSTNode):
     """
     Class representing a folder node of an FST
@@ -417,17 +388,28 @@ class FSTFolder(FSTNode):
             self._children[child.name] = child
 
     @classmethod
-    def from_path(cls, path: Union[str, Path]) -> FSTNode:
+    def from_path(cls, path: Union[Path, str], blacklist: Optional[GlobBlackList] = None) -> FSTNode:
         if isinstance(path, str):
             path = Path(str)
+
+        if blacklist is None:
+            blacklist = GlobBlackList(path, [])
 
         if not path.is_dir():
             error = "a non folder" if path.exists() else "a folder that doesn't exist"
             raise NotImplementedError(
                 f"Initializing an {cls.__name__} using {error} is not allowed")
 
-        node = cls(path.name, children=[cls.from_path(f)
-                                        for f in path.iterdir()])
+        children = []
+        for item in path.iterdir():
+            if blacklist.is_matching(item):
+                continue
+            if item.is_file():
+                children.append(FSTFile.from_path(item))
+            else:
+                children.append(FSTFolder.from_path(item, blacklist))
+
+        node = cls(path.name, children=children)
         return node
 
     @classproperty
@@ -601,7 +583,7 @@ class FSTFolder(FSTNode):
             if node.is_dir():
                 yield from node.recurse_children(enabledOnly=enabledOnly)
 
-    def get_node_by_path(self, path: Union[str, Path], skipExcluded: bool = True) -> FSTNode:
+    def get_node_by_path(self, path: Union[Path, str], skipExcluded: bool = True) -> FSTNode:
         """
         Retreive a node beneath this folder that matches `path`, glob patterns are supported
         """
@@ -686,8 +668,11 @@ class FileSystemTable(FSTFolder):
         return FSTNode.NodeType.ROOT
 
     @classmethod
-    def from_physical(cls, path: Union[str, Path]) -> FileSystemTable:
-        return cls.from_path(path)
+    def from_physical(cls, path: Union[Path, str], blacklist: Optional[List[str]] = None) -> FileSystemTable:
+        """
+        Converts a physical path in the filesystem described by `path` into an FST
+        """
+        return cls.from_path(path, blacklist)
 
     @classmethod
     def from_virtual(cls, fst: BinaryIO) -> FileSystemTable:
@@ -759,7 +744,7 @@ class FileSystemTable(FSTFolder):
         for node in sorted(self.recurse_files(), key=lambda x: x.position, reverse=reverse):
             yield node
 
-    def to_physical(self, dst: Union[str, Path], enabledOnly: bool = False):
+    def to_physical(self, dst: Union[Path, str], enabledOnly: bool = False):
         """
         Stores this FST as a file at path `dst`
         """

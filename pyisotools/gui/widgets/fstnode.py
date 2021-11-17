@@ -14,7 +14,7 @@ from PySide2.QtCore import QCoreApplication, QMetaObject, QRect, QRegExp, Qt
 from PySide2.QtGui import QRegExpValidator
 from PySide2.QtWidgets import *
 
-from .customwidgets import FilteredPlainTextEdit
+from pyisotools.gui.items.extended import FilteredPlainTextEdit
 
 
 class Ui_NodeFieldWindow():

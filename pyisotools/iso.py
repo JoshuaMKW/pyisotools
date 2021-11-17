@@ -16,7 +16,7 @@ from pyisotools.bnrparser import BNR
 from pyisotools.boot import Boot
 from pyisotools.fst import (FileSystemTable, FSTFile, FSTFolder,
                             FSTInvalidError, FSTInvalidNodeError, FSTNode)
-from pyisotools.iohelper import (align_int, read_string, read_ubyte,
+from pyisotools.tools import (align_int, read_string, read_ubyte,
                                  read_uint32, write_uint32)
 from pyisotools.partition import Partition, PartitionInvalidError
 
@@ -47,29 +47,32 @@ class BaseISO(ABC):
 
     @staticmethod
     @abstractmethod
-    def build_root(root: Path, dest: Union[Path, str] = None, genNewInfo: bool = False):
-        ...
+    def build_root(root: Path, dest: Union[Path, str] = None, genNewInfo: bool = False): ...
 
     @staticmethod
     @abstractmethod
-    def extract_iso(iso: Path, dest: Union[Path, str] = None):
-        ...
+    def extract_iso(iso: Path, dest: Union[Path, str] = None): ...
+
+    @property
+    def gamePartition(self) -> Partition: ...
+
+    @property
+    def updatePartition(self) -> Partition: ...
+            
+    @property
+    def channelPartition(self) -> Partition: ...
 
     @abstractmethod
-    def init_from_iso(self, iso: Union[Path, str]):
-        ...
+    def init_from_iso(self, iso: Union[Path, str]): ...
 
     @abstractmethod
-    def init_from_root(self, root: Union[Path, str]):
-        ...
+    def init_from_root(self, root: Union[Path, str]): ...
 
     @abstractmethod
-    def build(dest: Optional[Union[Path, str]] = None, preCalc: bool = True):
-        ...
+    def build(dest: Optional[Union[Path, str]] = None, preCalc: bool = True): ...
 
     @abstractmethod
-    def extract(self, dest: Optional[Union[Path, str]] = None, dumpPositions: bool = True):
-        ...
+    def extract(self, dest: Optional[Union[Path, str]] = None, dumpPositions: bool = True): ...
 
     def extract_path(
         self,
@@ -180,9 +183,12 @@ class BaseISO(ABC):
             self._locationTable[node.absPath] = node._fileoffset
 
 
-class WiiISO():
+class WiiISO(BaseISO):
 
     MaxSize = 4699979776
+
+    def __init__(self):
+        self.bootheader: Boot = None
 
     @classmethod
     def from_root(cls, root: Path) -> BaseISO:
@@ -196,8 +202,30 @@ class WiiISO():
         virtualISO.init_from_iso(iso)
         return virtualISO
 
+    @property
+    def gamePartition(self) -> Partition:
+        try:
+            return self.partitions["DATA"]
+        except KeyError:
+            return None
 
-class GamecubeISO():
+    @property
+    def updatePartition(self) -> Partition:
+        try:
+            return self.partitions["UPDATE"]
+        except KeyError:
+            return None
+
+    @property
+    def channelPartition(self) -> Partition:
+        try:
+            return self.partitions["CHANNEL"]
+        except KeyError:
+            return None
+
+
+
+class GamecubeISO(BaseISO):
 
     MaxSize = 1459978240
 
@@ -216,6 +244,21 @@ class GamecubeISO():
         virtualISO = cls()
         virtualISO.init_from_iso(iso)
         return virtualISO
+
+    @property
+    def gamePartition(self) -> Partition:
+        try:
+            return self.partitions["DATA"]
+        except KeyError:
+            return None
+
+    @property
+    def updatePartition(self) -> Partition:
+        return None
+            
+    @property
+    def channelPartition(self) -> Partition:
+        return None
 
     def build(self, dest: Union[Path, str] = None, preCalc: bool = True):
         self.onVirtualJobEnter(self.MaxSize)

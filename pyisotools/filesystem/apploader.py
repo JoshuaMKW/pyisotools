@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from pyisotools.iohelper import read_string, read_uint32, write_uint32
+from pyisotools.tools import read_string, read_uint32, write_uint32
 
 
 class Apploader():
