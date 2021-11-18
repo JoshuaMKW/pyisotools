@@ -18,7 +18,7 @@ from pyisotools.fst import (FileSystemTable, FSTFile, FSTFolder,
                             FSTInvalidError, FSTInvalidNodeError, FSTNode)
 from pyisotools.tools import (align_int, read_string, read_ubyte,
                                  read_uint32, write_uint32)
-from pyisotools.partition import Partition, PartitionInvalidError
+from pyisotools.filesystem.partition import Partition, PartitionInvalidError
 
 
 class DiscTooLargeError(Exception):

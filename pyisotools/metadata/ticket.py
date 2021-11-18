@@ -28,108 +28,12 @@ class TicketID(IntEnum):
     HIDDEN = 0x10008
 
 
-def __construct_title_id(__kind: TicketID, __id: Union[int, bytes]) -> int:
-    """
-    Returns a complete title ID as an int
-    """
-    __kind <<= 32
-    if isinstance(__id, bytes):
-        return __kind | int.from_bytes(__id, "big", signed=False)
-    return __kind | __id
-
-
 def __cmp_ord_at(__num: int, __idx: int, __chr: str) -> bool:
     """
     Check if the ordinal of __chr matches the byte at __idx of __int
     """
     assert len(__chr) == 1, "__chr isn't ord() compatible!"
     return (__num >> (__idx * 8)) == ord(__chr)
-
-
-class SystemTitleID(Enum):
-    """
-    IDs that fall under 0x10000
-    """
-    BOOT2 = __construct_title_id(TicketID.SYSTEM, 0x00000001)
-    SYSTEM_MENU = __construct_title_id(TicketID.SYSTEM, 0x00000002)
-    BC = __construct_title_id(TicketID.SYSTEM, 0x00000100)
-    MIOS = __construct_title_id(TicketID.SYSTEM, 0x00000101)
-    BC_NAND = __construct_title_id(TicketID.SYSTEM, 0x00000200)
-    BC_WFS = __construct_title_id(TicketID.SYSTEM, 0x00000201)
-
-
-class DiscTitleID(Enum):
-    """
-    IDs that fall under 0x10001
-    """
-    BOOT2_UPDATER = __construct_title_id(TicketID.DISC, b"0000")
-    DATACHK = __construct_title_id(TicketID.DISC, b"0002")
-    FACTORY_TITLE = __construct_title_id(TicketID.DISC, b"0003")
-    UPDATE_PARTITION = __construct_title_id(TicketID.DISC, b".UPE")
-    CHANNEL_INSTALLER = __construct_title_id(TicketID.DISC, b".INS")
-    PHOTO_CHANNEL = __construct_title_id(TicketID.DISC, b"HAZA")
-
-
-class SystemChannelID(Enum):
-    """
-    IDs that fall under 0x10002 (WII_MESSAGE_BOARD is the exception)
-    """
-    PHOTO_CHANNEL_1 = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAAA")
-    SHOPPING_CHANNEL = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HABA")
-    SHOPPING_CHANNEL_K = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HABK")
-    MII_CHANNEL = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HACA")
-    MII_CHANNEL_K = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HACK")
-    WEATHER_CHANNEL = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAFA")
-    NEWS_CHANNEL = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAGA")
-    PHOTO_CHANNEL_2 = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAYA")
-    PHOTO_CHANNEL_2_K = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAYK")
-    WII_MESSAGE_BOARD = __construct_title_id(TicketID.CHANNEL, b"HAEA")
-
-
-class GameChannelID(Enum):
-    """
-    IDs that fall under 0x10004
-    """
-    WII_FIT_CHANNEL_U = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNU")
-    WII_FIT_CHANNEL_J = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNJ")
-    WII_FIT_CHANNEL_P = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNP")
-    WII_FIT_CHANNEL_K = __construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNK")
-    WII_FIT_PLUS_CHANNEL_U = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RFPU")
-    WII_FIT_PLUS_CHANNEL_J = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RFPJ")
-    WII_FIT_PLUS_CHANNEL_P = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RFPP")
-    WII_FIT_PLUS_CHANNEL_K = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RFPK")
-    MARIO_KART_CHANNEL_U = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RMCU")
-    MARIO_KART_CHANNEL_J = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RMCJ")
-    MARIO_KART_CHANNEL_P = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RMCP")
-    MARIO_KART_CHANNEL_K = __construct_title_id(
-        TicketID.SYSTEM_CHANNEL, b"RMCK")
-    RABBIDS_CHANNEL = __construct_title_id(TicketID.CHANNEL, b"RGWX")
-
-
-class HiddenChannelID(Enum):
-    """
-    IDs that fall under 0x10008
-    """
-    PERSONAL_DATA_CHANNEL = __construct_title_id(TicketID.HIDDEN, b"HCCJ")
-    EULA_U = __construct_title_id(TicketID.HIDDEN, b"HAKU")
-    EULA_J = __construct_title_id(TicketID.HIDDEN, b"HAKJ")
-    EULA_P = __construct_title_id(TicketID.HIDDEN, b"HAKP")
-    EULA_K = __construct_title_id(TicketID.HIDDEN, b"HAKK")
-    REGION_SELECT_U = __construct_title_id(TicketID.HIDDEN, b"HALU")
-    REGION_SELECT_J = __construct_title_id(TicketID.HIDDEN, b"HALJ")
-    REGION_SELECT_P = __construct_title_id(TicketID.HIDDEN, b"HALP")
-    REGION_SELECT_K = __construct_title_id(TicketID.HIDDEN, b"HALK")
-    MYSTERY_CHANNEL_U = __construct_title_id(TicketID.HIDDEN, b"HCZU")
-    MYSTERY_CHANNEL_J = __construct_title_id(TicketID.HIDDEN, b"HCZJ")
-    MYSTERY_CHANNEL_P = __construct_title_id(TicketID.HIDDEN, b"HCZP")
-    MYSTERY_CHANNEL_K = __construct_title_id(TicketID.HIDDEN, b"HCZK")
 
 
 class TitleID(int):
@@ -143,7 +47,10 @@ class TitleID(int):
         """
         Returns a complete title ID as an int
         """
-        return cls(__construct_title_id(kind, id))
+        kind <<= 32
+        if isinstance(id, bytes):
+            return kind | int.from_bytes(id, "big", signed=False)
+        return cls(kind | id)
 
     @classmethod
     def lookup_title_id(cls, name: str, local: bool = False) -> "TitleID":
@@ -242,6 +149,92 @@ class TitleID(int):
         rawID = self.to_bytes(4, "big", signed=False)
         titleID = bytes_to_string(rawID) if rawID.isalnum() else f"{self:08X}"
         return f"{self >> 32:08X}-{titleID}"
+
+
+class SystemTitleID(IntEnum):
+    """
+    IDs that fall under 0x10000
+    """
+    BOOT2 = TitleID.construct_title_id(TicketID.SYSTEM, 0x00000001)
+    SYSTEM_MENU = TitleID.construct_title_id(TicketID.SYSTEM, 0x00000002)
+    BC = TitleID.construct_title_id(TicketID.SYSTEM, 0x00000100)
+    MIOS = TitleID.construct_title_id(TicketID.SYSTEM, 0x00000101)
+    BC_NAND = TitleID.construct_title_id(TicketID.SYSTEM, 0x00000200)
+    BC_WFS = TitleID.construct_title_id(TicketID.SYSTEM, 0x00000201)
+
+
+class DiscTitleID(IntEnum):
+    """
+    IDs that fall under 0x10001
+    """
+    BOOT2_UPDATER = TitleID.construct_title_id(TicketID.DISC, b"0000")
+    DATACHK = TitleID.construct_title_id(TicketID.DISC, b"0002")
+    FACTORY_TITLE = TitleID.construct_title_id(TicketID.DISC, b"0003")
+    UPDATE_PARTITION = TitleID.construct_title_id(TicketID.DISC, b".UPE")
+    CHANNEL_INSTALLER = TitleID.construct_title_id(TicketID.DISC, b".INS")
+    PHOTO_CHANNEL = TitleID.construct_title_id(TicketID.DISC, b"HAZA")
+
+
+class SystemChannelID(IntEnum):
+    """
+    IDs that fall under 0x10002 (WII_MESSAGE_BOARD is the exception)
+    """
+    PHOTO_CHANNEL_1 = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAAA")
+    SHOPPING_CHANNEL = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HABA")
+    SHOPPING_CHANNEL_K = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HABK")
+    MII_CHANNEL = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HACA")
+    MII_CHANNEL_K = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HACK")
+    WEATHER_CHANNEL = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAFA")
+    NEWS_CHANNEL = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAGA")
+    PHOTO_CHANNEL_2 = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAYA")
+    PHOTO_CHANNEL_2_K = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"HAYK")
+    WII_MESSAGE_BOARD = TitleID.construct_title_id(TicketID.CHANNEL, b"HAEA")
+
+
+class GameChannelID(IntEnum):
+    """
+    IDs that fall under 0x10004
+    """
+    WII_FIT_CHANNEL_U = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNU")
+    WII_FIT_CHANNEL_J = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNJ")
+    WII_FIT_CHANNEL_P = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNP")
+    WII_FIT_CHANNEL_K = TitleID.construct_title_id(TicketID.SYSTEM_CHANNEL, b"RFNK")
+    WII_FIT_PLUS_CHANNEL_U = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RFPU")
+    WII_FIT_PLUS_CHANNEL_J = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RFPJ")
+    WII_FIT_PLUS_CHANNEL_P = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RFPP")
+    WII_FIT_PLUS_CHANNEL_K = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RFPK")
+    MARIO_KART_CHANNEL_U = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RMCU")
+    MARIO_KART_CHANNEL_J = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RMCJ")
+    MARIO_KART_CHANNEL_P = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RMCP")
+    MARIO_KART_CHANNEL_K = TitleID.construct_title_id(
+        TicketID.SYSTEM_CHANNEL, b"RMCK")
+    RABBIDS_CHANNEL = TitleID.construct_title_id(TicketID.CHANNEL, b"RGWX")
+
+
+class HiddenChannelID(IntEnum):
+    """
+    IDs that fall under 0x10008
+    """
+    PERSONAL_DATA_CHANNEL = TitleID.construct_title_id(TicketID.HIDDEN, b"HCCJ")
+    EULA_U = TitleID.construct_title_id(TicketID.HIDDEN, b"HAKU")
+    EULA_J = TitleID.construct_title_id(TicketID.HIDDEN, b"HAKJ")
+    EULA_P = TitleID.construct_title_id(TicketID.HIDDEN, b"HAKP")
+    EULA_K = TitleID.construct_title_id(TicketID.HIDDEN, b"HAKK")
+    REGION_SELECT_U = TitleID.construct_title_id(TicketID.HIDDEN, b"HALU")
+    REGION_SELECT_J = TitleID.construct_title_id(TicketID.HIDDEN, b"HALJ")
+    REGION_SELECT_P = TitleID.construct_title_id(TicketID.HIDDEN, b"HALP")
+    REGION_SELECT_K = TitleID.construct_title_id(TicketID.HIDDEN, b"HALK")
+    MYSTERY_CHANNEL_U = TitleID.construct_title_id(TicketID.HIDDEN, b"HCZU")
+    MYSTERY_CHANNEL_J = TitleID.construct_title_id(TicketID.HIDDEN, b"HCZJ")
+    MYSTERY_CHANNEL_P = TitleID.construct_title_id(TicketID.HIDDEN, b"HCZP")
+    MYSTERY_CHANNEL_K = TitleID.construct_title_id(TicketID.HIDDEN, b"HCZK")
 
 
 @dataclass

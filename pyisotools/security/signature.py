@@ -3,14 +3,14 @@ from enum import IntEnum
 from typing import Optional, Union
 
 from Crypto.PublicKey import RSA
-from Crypto.Hash import SHA1, SHA256, SHA512
+from Crypto.Hash import SHA1
 
 
 class SigType(IntEnum):
     RSA4096 = 0x10000
     RSA2048 = 0x10001
     ECCB233 = 0x10002
-    
+
 
 class Signature(ABC):
     """
@@ -76,7 +76,7 @@ class SignatureRSA4096(Signature):
         """
         Sets the signature by encrypting `sig`
         """
-        shaHash = SHA512.new(sig) # 0x200 bytes long
+        shaHash = SHA1.new(sig) # 0x200 bytes long
         hashedBytes = shaHash.digest()
 
         rsaKey = RSA.generate(2048)

@@ -18,15 +18,14 @@ from PIL import Image, ImageQt
 from pyisotools import __version__
 from pyisotools.filesystem.bi2 import BI2
 from pyisotools.filesystem.bnr import BNR
-from pyisotools.gui.filesizemap import pretty_filesize
 from pyisotools.gui.flagthread import FlagThread
 from pyisotools.gui.items.extended import FSTTreeItem
 from pyisotools.gui.mainwindow import Ui_MainWindow
 from pyisotools.gui.updater import GitUpdateScraper
 from pyisotools.gui.widgets.fstnode import Ui_NodeFieldWindow
 from pyisotools.gui.widgets.updater import Ui_UpdateDialog
-from pyisotools.gui.workpathing import get_program_folder, resource_path
 from pyisotools.iso import FSTNode, GamecubeISO, WiiISO
+from pyisotools.tools import get_program_folder, pretty_filesize, resource_path
 from PySide2.QtCore import QEvent, Qt
 from PySide2.QtGui import QIcon
 from PySide2.QtWidgets import (QAction, QDialog, QFileDialog, QFrame,

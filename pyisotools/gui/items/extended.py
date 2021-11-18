@@ -7,7 +7,7 @@ from PySide2.QtGui import (QKeyEvent, QKeySequence, QRegExpValidator,
                            QTextOption)
 from PySide2.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem
 
-from ..fst import FSTNode
+from pyisotools.filesystem.fst import FSTNode
 
 # pylint: disable=invalid-name
 # pylint: disable=no-member
