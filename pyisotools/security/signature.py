@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Union
+from typing import Optional, Union
 
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA1, SHA256, SHA512
@@ -10,24 +10,19 @@ class SigType(IntEnum):
     RSA4096 = 0x10000
     RSA2048 = 0x10001
     ECCB233 = 0x10002
+    
 
 class Signature(ABC):
     """
     Abstract class representing a Wii verification signature
     """
 
-    def __init__(self, signature: bytes, publickey: RSA.RsaKey, privatekey: RSA.RsaKey, name: str):
+    def __init__(self, signature: bytes, publickey: RSA.RsaKey, privatekey: Optional[RSA.RsaKey] = None, name: str = ""):
         assert len(signature) == Signature.get_length_of(self.type)
         self._signature = signature
         self.publickey = publickey
         self.privatekey = privatekey
         self.name = name
-
-    @abstractmethod
-    def size() -> int: ...
-
-    @abstractmethod
-    def sign_off(self, data: bytes): ...
 
     @staticmethod
     def get_length_of(type: SigType) -> int:
@@ -38,6 +33,19 @@ class Signature(ABC):
         if type == SigType.ECCB233:
             return 0x3C
         return -1
+
+    @abstractmethod
+    def size() -> int: ...
+
+    @abstractmethod
+    def sign_off(self, data: bytes): ...
+
+    @abstractmethod
+    def verify(self, publicKey: RSA.RsaKey, match: bytes) -> bool:
+        decodedSig = pow(self._signature, self.publickey.d, self.publickey.n)
+        sig = decodedSig.to_bytes(Signature.get_length_of(SigType.RSA4096), "big", signed=False)
+
+        return sig == match
 
     
 

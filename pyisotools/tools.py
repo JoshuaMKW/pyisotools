@@ -11,6 +11,28 @@ class classproperty(property):
 # pylint: enable=invalid-name
 
 
+def align_int(num: int, alignment: int) -> int:
+    return (num + (alignment - 1)) & -alignment
+
+
+def bytes_to_string(data: bytes, encoding: Optional[str] = None) -> str:
+    """
+    Smartly decodes an array of bytes to a string using `chardet`
+    """
+    KNOWN_ENCODES = {"ascii", "utf-8", "shift-jis", "iso-8859-1"}
+    if encoding is None:
+        encoder = UniversalDetector()
+        encoder.feed(data)
+        encoding = encoder.close()["encoding"]
+
+    try:
+        if not encoding or encoding.lower() not in KNOWN_ENCODES:
+            encoding = "shift-jis"
+        return data.decode(encoding)
+    except UnicodeDecodeError:
+        return ""
+
+
 def read_sbyte(f: BinaryIO):
     return struct.unpack("b", f.read(1))[0]
 
@@ -103,20 +125,4 @@ def read_string(
         binary += f.read(1)
         length += 1
 
-    binary = binary[:-1]
-
-    if encoding is None:
-        encoder = UniversalDetector()
-        encoder.feed(binary)
-        encoding = encoder.close()["encoding"]
-
-    try:
-        if not encoding or encoding.lower() not in {"ascii", "utf-8", "shift-jis", "iso-8859-1"}:
-            encoding = "shift-jis"
-        return binary.decode(encoding)
-    except UnicodeDecodeError:
-        return ""
-
-
-def align_int(num: int, alignment: int) -> int:
-    return (num + (alignment - 1)) & -alignment
+    return bytes_to_string(binary[:-1], encoding=)

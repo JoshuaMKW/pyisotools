@@ -1,0 +1,8 @@
+from pyisotools.metadata.console import ConsoleKind
+
+# The common AES key of each console type used as the master encryption of most security measures on the Wii
+COMMON_AES_KEY = {
+    ConsoleKind.RETAIL: b"\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7",
+    ConsoleKind.KOREAN: b"\x63\xB8\x2B\xB4\xF4\x61\x4E\x2E\x13\xF2\xFE\xFB\xBA\x4C\x9B\x7E",
+    ConsoleKind.DEBUG: b"\xA1\x60\x4A\x6A\x71\x23\xB5\x29\xAE\x8B\xEC\x32\xC8\x16\xFC\xAA"
+}

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from pyisotools.signature import SignatureRSA2048
+from pyisotools.security.signature import SignatureRSA2048
 
 @dataclass(eq=True)
 class TMDHeader():
