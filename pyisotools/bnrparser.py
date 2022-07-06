@@ -177,8 +177,8 @@ class BNR(RGB5A3):
             for blockColumn in range(BNR.ImgTileWidth):
                 for tileRow in range(BNR.TileHeight):
                     for tileColumn in range(BNR.TileWidth):
-                        column = blockColumn*BNR.TileWidth + tileRow
-                        row = blockRow*BNR.TileHeight + tileColumn
+                        column = blockColumn*BNR.TileWidth + tileColumn
+                        row = blockRow*BNR.TileHeight + tileRow
 
                         pixel = smallImg.getpixel((column, row))
                         if column < BNR.ImageWidth and row < BNR.ImageHeight:
@@ -263,8 +263,8 @@ class BNR(RGB5A3):
             for blockColumn in range(BNR.ImgTileWidth):
                 for tileRow in range(BNR.TileHeight):
                     for tileColumn in range(BNR.TileWidth):
-                        column = blockColumn*BNR.TileWidth + tileRow
-                        row = blockRow*BNR.TileHeight + tileColumn
+                        column = blockColumn*BNR.TileWidth + tileColumn
+                        row = blockRow*BNR.TileHeight + tileRow
 
                         pixel = int.from_bytes(
                             _image.read(2), "big", signed=False)
