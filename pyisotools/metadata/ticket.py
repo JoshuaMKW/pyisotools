@@ -1,12 +1,16 @@
 import json
-
 from dataclasses import dataclass
 from enum import Enum, IntEnum
+from io import BytesIO
 from typing import List, Union
-from pyisotools.gui.workpathing import resource_path
-from pyisotools.metadata.console import ConsoleID
 
+from Crypto.Cipher import AES
+
+from pyisotools.security import COMMON_AES_KEY
+from pyisotools.gui.workpathing import resource_path
+from pyisotools.metadata.console import ConsoleKind
 from pyisotools.metadata.region import RegionCode, SystemCode
+from pyisotools.security.certificate import Certificate
 from pyisotools.security.signature import Signature, SignatureRSA2048, SigType
 from pyisotools.tools import bytes_to_string
 
@@ -151,7 +155,13 @@ class TitleID(int):
         return f"{self >> 32:08X}-{titleID}"
 
 
-class SystemTitleID(IntEnum):
+class TitleEnum(TitleID, Enum):
+    """
+    Special Enum describing pre-defined TitleIDs
+    """
+
+
+class SystemTitleID(TitleEnum):
     """
     IDs that fall under 0x10000
     """
@@ -163,7 +173,7 @@ class SystemTitleID(IntEnum):
     BC_WFS = TitleID.construct_title_id(TicketID.SYSTEM, 0x00000201)
 
 
-class DiscTitleID(IntEnum):
+class DiscTitleID(TitleEnum):
     """
     IDs that fall under 0x10001
     """
@@ -175,7 +185,7 @@ class DiscTitleID(IntEnum):
     PHOTO_CHANNEL = TitleID.construct_title_id(TicketID.DISC, b"HAZA")
 
 
-class SystemChannelID(IntEnum):
+class SystemChannelID(TitleEnum):
     """
     IDs that fall under 0x10002 (WII_MESSAGE_BOARD is the exception)
     """
@@ -191,7 +201,7 @@ class SystemChannelID(IntEnum):
     WII_MESSAGE_BOARD = TitleID.construct_title_id(TicketID.CHANNEL, b"HAEA")
 
 
-class GameChannelID(IntEnum):
+class GameChannelID(TitleEnum):
     """
     IDs that fall under 0x10004
     """
@@ -218,7 +228,7 @@ class GameChannelID(IntEnum):
     RABBIDS_CHANNEL = TitleID.construct_title_id(TicketID.CHANNEL, b"RGWX")
 
 
-class HiddenChannelID(IntEnum):
+class HiddenChannelID(TitleEnum):
     """
     IDs that fall under 0x10008
     """
@@ -263,7 +273,7 @@ class TicketView():
     issuer: str
     titleKey: bytes  # Encrypted
     ticketID: bytes
-    consoleID: ConsoleID
+    consoleID: ConsoleKind
     titleID: TitleID  # IV for AES-CBC encryption (8 bytes long)
     permittedTitlesMask: int
     # Disc title ANDed with inverse of this checked against permittedTitlesMask
@@ -280,3 +290,23 @@ class Ticket():
     def __init__(self, signature: SignatureRSA2048, view: TicketView):
         self.signature = signature
         self.view = view
+
+    @classmethod
+    def from_bytes(cls, data: Union[bytes, BytesIO]) -> "Ticket":
+        """
+        Build a ticket from the raw bytes provided
+        """
+        if isinstance(data, bytes):
+            data = BytesIO(data)
+
+        signature = SignatureRSA2048(data.read(0x100))
+
+    def to_bytes(self) -> bytes:
+        ...
+
+    def get_title_key(self, consoleKind: ConsoleKind = ConsoleKind.RETAIL) -> bytes:
+        """
+        Return the decrypted title key extracted from this ticket
+        """
+        aesIV = self.view.titleID.to_bytes(8, "big", signed=False) + (b"\x00" * 8)
+        return AES.new(COMMON_AES_KEY[consoleKind], AES.MODE_CBC, aesIV).digest()

@@ -89,7 +89,6 @@ class ReleaseManager():
 
 
 class GitUpdateScraper(FlagThread, ReleaseManager):
-
     updateFound = Signal()
 
     def __init__(self, owner: str, repository: str, parent=None):

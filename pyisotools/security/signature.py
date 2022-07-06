@@ -5,6 +5,8 @@ from typing import Optional, Union
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA1
 
+from pyisotools.tools import classproperty
+
 
 class SigType(IntEnum):
     RSA4096 = 0x10000
@@ -17,12 +19,20 @@ class Signature(ABC):
     Abstract class representing a Wii verification signature
     """
 
-    def __init__(self, signature: bytes, publickey: RSA.RsaKey, privatekey: Optional[RSA.RsaKey] = None, name: str = ""):
+    def __init__(self,
+                 signature: bytes,
+                 publickey: Optional[RSA.RsaKey] = None,
+                 privatekey: Optional[RSA.RsaKey] = None,
+                 name: str = ""):
         assert len(signature) == Signature.get_length_of(self.type)
         self._signature = signature
         self.publickey = publickey
         self.privatekey = privatekey
         self.name = name
+
+    @abstractmethod
+    @classproperty
+    def type(self) -> SigType: ...
 
     @staticmethod
     def get_length_of(type: SigType) -> int:
@@ -35,6 +45,7 @@ class Signature(ABC):
         return -1
 
     @abstractmethod
+    @property
     def size() -> int: ...
 
     @abstractmethod
@@ -50,9 +61,13 @@ class Signature(ABC):
     
 
     def __len__(self) -> int:
-        return self.size()
+        return self.size
 
 class SignatureRSA4096(Signature):
+    @classproperty
+    def type(self) -> SigType: ...
+
+    @property
     def size() -> int:
         return 0x280
 
@@ -85,9 +100,17 @@ class SignatureRSA4096(Signature):
         self._signature = signature
 
 class SignatureRSA2048(Signature):
+    @classproperty
+    def type(self) -> SigType: ...
+
+    @property
     def size() -> int:
         return 0x180
 
 class SignatureECCB233(Signature):
+    @classproperty
+    def type(self) -> SigType: ...
+
+    @property
     def size() -> int:
         return 0xC0

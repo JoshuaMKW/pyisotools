@@ -15,7 +15,7 @@ from types import TracebackType
 from typing import Callable, Dict, Iterable, Tuple, Union
 
 from PIL import Image, ImageQt
-from pyisotools import __version__
+from pyisotools import __version__, __name__
 from pyisotools.filesystem.bi2 import BI2
 from pyisotools.filesystem.bnr import BNR
 from pyisotools.gui.flagthread import FlagThread
@@ -224,7 +224,7 @@ class NodeFieldDialog(QDialog):
 class Controller(QMainWindow):
     class Themes(Enum):
         LIGHT = 0
-        DARK = 0
+        DARK = 1
 
     class ProgressHandler():
         Depth = 0
@@ -276,11 +276,11 @@ class Controller(QMainWindow):
     @staticmethod
     def get_config_path():
         versionStub = __version__.replace(".", "-")
-        return get_program_folder(f"pyisotools v{versionStub}") / "program.cfg"
+        return get_program_folder(f"{__name__} v{versionStub}") / "program.cfg"
 
     @staticmethod
     def get_window_title():
-        return f"pyisotools v{__version__}"
+        return f"{__name__} v{__version__}"
 
     @staticmethod
     def open_path_in_explorer(path: Path):
@@ -314,7 +314,7 @@ class Controller(QMainWindow):
         self._fromIso = False
         self._viewPath: Path = None
 
-        self.updater = GitUpdateScraper("JoshuaMKW", "pyisotools")
+        self.updater = GitUpdateScraper("JoshuaMKW", "{__name__}")
         self.updater.updateFound.connect(self.notify_update)
         self.updater.set_wait_time(60.0 * 60.0 * 2)  # Every 2 hours
         self.updater.start()
@@ -348,7 +348,7 @@ class Controller(QMainWindow):
         dialog.setModal(True)
 
         updateWindow.updateLabel.setText(
-            f"pyisotools {newestRelease.tag_name} available!")
+            f"{__name__} {newestRelease.tag_name} available!")
         updateWindow.changelogTextEdit.setMarkdown(
             self.updater.compile_changelog_from(__version__))
 
@@ -704,7 +704,7 @@ class Controller(QMainWindow):
         bnr.gameDescription = self.ui.bannerDescTextBox.toPlainText()
 
     def help_about(self):
-        desc = "".join(["pyisotools is a tool for extracting and building Gamecube ISOs.\n",
+        desc = "".join(["{__name__} is a tool for extracting and building Gamecube ISOs.\n",
                         "This tools serves as the successor to GCR, and supports new features\n",
                         "as well as many bug fixes.",
                         "\n\n",
@@ -1013,7 +1013,7 @@ class Controller(QMainWindow):
                     parent=x, callback=_extract_path_from_iso, args=(y,)))
                 menu.addAction(extractAction)
 
-        menu.exec_(self.ui.fileSystemTreeWidget.mapToGlobal(point))
+        menu.exec(self.ui.fileSystemTreeWidget.mapToGlobal(point))
     # pylint: enable=no-member
 
     def file_system_set_fields(self, item: FSTTreeItem, column: int):
