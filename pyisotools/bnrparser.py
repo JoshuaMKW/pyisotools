@@ -349,6 +349,9 @@ class BNR(RGB5A3):
             return RGB5A1.decode_pixel(pixel)
         return RGB5A3.decode_pixel(pixel)
 
+    def __len__(self) -> int:
+        return len(self._rawdata)
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(
