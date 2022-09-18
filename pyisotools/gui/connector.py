@@ -10,7 +10,7 @@ import traceback
 from enum import Enum, IntEnum
 from fnmatch import fnmatch
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePath
 from types import TracebackType
 from typing import Callable, Dict, Iterable, Tuple, Union
 
@@ -18,7 +18,7 @@ from PIL import Image, ImageQt
 from pyisotools.gui.mainwindow import Ui_MainWindow
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QIcon, QAction
-from PySide6.QtWidgets import (QDialog, QFileDialog, QFrame,
+from PySide6.QtWidgets import (QDialog, QFileDialog, QFrame, QSizePolicy, QTextEdit, QLabel,
                                QMainWindow, QMenu, QMessageBox)
 
 from .. import __version__
@@ -101,6 +101,9 @@ def notify_status(notification: Union[str, QDialog], context: JobDialogState):
         @functools.wraps(func)
         def wrapper(*args: Controller, **kwargs):
             nonlocal notification
+
+            progressBar = args[0].ui.operationProgressBar
+
             try:
                 if notification is not None:
                     successful = func(*args, **kwargs)
@@ -110,8 +113,9 @@ def notify_status(notification: Union[str, QDialog], context: JobDialogState):
                 dialog = JobFailedDialog(
                     args[0], info="".join(traceback.format_exc()))
                 dialog.exec_()
-                args[0].ui.operationProgressBar.setTextVisible(False)
-                args[0].ui.operationProgressBar.setValue(0)
+                progressBar.setTextVisible(False)
+                progressBar.setValue(0)
+                progressBar.setFormat("Please wait... %p%")
                 return None
 
             dialog = None
@@ -119,8 +123,9 @@ def notify_status(notification: Union[str, QDialog], context: JobDialogState):
                 dialog = JobFailedDialog(
                     args[0], info=ProgramState.get_message())
                 dialog.exec_()
-                args[0].ui.operationProgressBar.setTextVisible(False)
-                args[0].ui.operationProgressBar.setValue(0)
+                progressBar.setTextVisible(False)
+                progressBar.setValue(0)
+                progressBar.setFormat("Please wait... %p%")
                 ProgramState.reset()
             elif issubclass(type(notification), QDialog):
                 if not successful and (context & JobDialogState.SHOW_FAILURE):
@@ -134,8 +139,9 @@ def notify_status(notification: Union[str, QDialog], context: JobDialogState):
                 if successful and (context & JobDialogState.SHOW_WARNING_WHEN_MESSAGE):
                     notification.exec_()
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
-                    args[0].ui.operationProgressBar.setTextVisible(False)
-                    args[0].ui.operationProgressBar.setValue(0)
+                    progressBar.setTextVisible(False)
+                    progressBar.setValue(0)
+                    progressBar.setFormat("Please wait... %p%")
             else:
                 if not successful and (context & JobDialogState.SHOW_FAILURE):
                     dialog = JobFailedDialog(args[0], info=notification)
@@ -156,8 +162,9 @@ def notify_status(notification: Union[str, QDialog], context: JobDialogState):
                         dialog = JobWarningDialog(notification, args[0])
                         dialog.exec_()
                 if context & JobDialogState.RESET_PROGRESS_AFTER:
-                    args[0].ui.operationProgressBar.setTextVisible(False)
-                    args[0].ui.operationProgressBar.setValue(0)
+                    progressBar.setTextVisible(False)
+                    progressBar.setValue(0)
+                    progressBar.setFormat("Please wait... %p%")
 
             return successful
         return wrapper
@@ -185,6 +192,7 @@ class JobFailedDialog(QMessageBox):
         self.setText("Job failed!")
         self.setInformativeText(info)
         self.setWindowTitle("Error")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
 
 class JobCompleteDialog(QMessageBox):
@@ -198,6 +206,7 @@ class JobCompleteDialog(QMessageBox):
         self.setText("Job complete!")
         self.setInformativeText(info)
         self.setWindowTitle("Info")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
 
 class JobWarningDialog(QMessageBox):
@@ -269,7 +278,7 @@ class Controller(QMainWindow):
         self.extractPath: Path = None
         self.rootPath: Path = None
         self.genericPath: Path = None
-        self.bnrMap: Dict[str, BNR] = {}
+        self.bnrMap: Dict[PurePath, BNR] = {}
 
         self._fromIso = False
         self._viewPath: Path = None
@@ -279,6 +288,12 @@ class Controller(QMainWindow):
         self.updater.set_wait_time(60.0 * 60.0 * 2)  # Every 2 hours
         self.updater.start()
         ThreadManager.register(self.updater)
+
+        self.jobSize = 0
+        self.jobName = ""
+
+        self.taskSize = 0
+        self.taskName = ""
 
     def closeEvent(self, event):
         self.update_program_config()
@@ -340,12 +355,14 @@ class Controller(QMainWindow):
             self._fromIso = True
 
             iso = GamecubeISO.from_iso(self.rootPath)
-            iso.onPhysicalJobStart = self._iso_start_callback
-            iso.onPhysicalJobComplete = self._iso_complete_callback
-            iso.onPhysicalJobExit = self._iso_exit_callback
-            iso.onVirtualJobStart = self._iso_start_callback
-            iso.onVirtualJobComplete = self._iso_complete_callback
-            iso.onVirtualJobExit = self._iso_exit_callback
+            iso.onPhysicalJobStart = self._iso_job_start_callback
+            iso.onPhysicalTaskStart = self._iso_task_start_callback
+            iso.onPhysicalTaskComplete = self._iso_task_complete_callback
+            iso.onPhysicalJobEnd = self._iso_job_end_callback
+            iso.onVirtualJobStart = self._iso_job_start_callback
+            iso.onVirtualTaskStart = self._iso_task_start_callback
+            iso.onVirtualTaskComplete = self._iso_task_complete_callback
+            iso.onVirtualJobEnd = self._iso_job_end_callback
             self.iso = iso
 
             self.ui.actionClose.setEnabled(True)
@@ -384,19 +401,15 @@ class Controller(QMainWindow):
             self._fromIso = False
 
             iso = GamecubeISO.from_root(self.rootPath, True)
-            iso.onPhysicalJobStart = self._iso_start_callback
-            iso.onPhysicalJobComplete = self._iso_complete_callback
-            iso.onPhysicalJobExit = self._iso_exit_callback
-            iso.onVirtualJobStart = self._iso_start_callback
-            iso.onVirtualJobComplete = self._iso_complete_callback
-            iso.onVirtualJobExit = self._iso_exit_callback
+            iso.onPhysicalJobStart = self._iso_job_start_callback
+            iso.onPhysicalTaskStart = self._iso_task_start_callback
+            iso.onPhysicalTaskComplete = self._iso_task_complete_callback
+            iso.onPhysicalJobEnd = self._iso_job_end_callback
+            iso.onVirtualJobStart = self._iso_job_start_callback
+            iso.onVirtualTaskStart = self._iso_task_start_callback
+            iso.onVirtualTaskComplete = self._iso_task_complete_callback
+            iso.onVirtualJobEnd = self._iso_job_end_callback
             self.iso = iso
-
-            # for node in self.iso.rchildren():
-            #     if node.is_file() and node.name.endswith(".bnr"):
-            #         f.seek(node._fileoffset)
-            #         self.bnrMap[node.path] = BNR.from_data(
-            #             f, size=node.size)
 
             self.ui.actionClose.setEnabled(True)
             self.ui.actionSave.setEnabled(True)
@@ -432,7 +445,7 @@ class Controller(QMainWindow):
             return False
 
         self.buildPath = Path(dialog.selectedFiles()[0]).resolve()
-        self.save_all(False)
+        self.save_all()
 
         self.iso.build(self.buildPath, False)
 
@@ -450,7 +463,7 @@ class Controller(QMainWindow):
             return False
 
         self.extractPath = Path(dialog.selectedFiles()[0]).resolve()
-        self.save_all(False)
+        self.save_all()
 
         self.iso.extract(self.extractPath, dumpPositions)
 
@@ -503,7 +516,8 @@ class Controller(QMainWindow):
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
-        currentBNR = self.bnrMap[self.ui.bannerComboBox.currentText()]
+        currentBNR = self.bnrMap[PurePath(
+            self.ui.bannerComboBox.currentText())]
         if self.bnrImagePath.is_file():
             if self.bnrImagePath.suffix == ".bnr":
                 currentBNR.rawImage = BytesIO(
@@ -541,7 +555,8 @@ class Controller(QMainWindow):
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
-        currentBNR = self.bnrMap[self.ui.bannerComboBox.currentText()]
+        currentBNR = self.bnrMap[PurePath(
+            self.ui.bannerComboBox.currentText())]
         image = currentBNR.get_image()
         image.save(self.bnrImagePath)
 
@@ -567,18 +582,18 @@ class Controller(QMainWindow):
                 for node in self.iso.rchildren():
                     if node.is_file() and node.name.endswith(".bnr"):
                         f.seek(node._fileoffset)
-                        self.bnrMap[str(node.path)] = BNR.from_data(
+                        self.bnrMap[PurePath(node.path)] = BNR.from_data(
                             f, size=node.size)
         else:
             for p in self.rootPath.rglob("*.bnr"):
                 if p.is_file():
                     with p.open("rb") as pp:
-                        self.bnrMap[str(p.relative_to(self.rootPath / "files"))] = BNR.from_data(
+                        self.bnrMap[p.relative_to(self.rootPath / "files")] = BNR.from_data(
                             pp, size=p.stat().st_size)
 
         self.ui.bannerComboBox.clear()
         self.ui.bannerComboBox.addItems(sorted(
-            [p.path for p in self.iso.rchildren() if p.name.endswith(".bnr")], key=str.lower))
+            ["/".join(p.parts) for p in self.bnrMap.keys()], key=str.lower))
 
     def bnr_update_info(self, *args):
         if len(self.bnrMap) == 0:
@@ -594,10 +609,10 @@ class Controller(QMainWindow):
 
         bnrLangComboBox.setItemText(0, "English")
 
-        curBnrName = bnrComboBox.currentText()
+        curBnrName = Path(bnrComboBox.currentText())
         if not curBnrName in self.bnrMap:
             curBnrName = list(self.bnrMap.keys())[0]
-            bnrComboBox.setCurrentText(curBnrName)
+            bnrComboBox.setCurrentText(str(curBnrName))
 
         bnr = self.bnrMap[curBnrName]
 
@@ -635,11 +650,19 @@ class Controller(QMainWindow):
         bnrComboBox.blockSignals(False)
         bnrLangComboBox.blockSignals(False)
 
+    @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE | JobDialogState.RESET_PROGRESS_AFTER)
+    def bnr_save_info_wrapped(self):
+        try:
+            self.bnr_save_info()
+        except RuntimeError as e:
+            return False, str(e)
+        return True, "Banner Information saved successfully!"
+
     def bnr_save_info(self):
         if len(self.bnrMap) == 0:
             return
 
-        bnr = self.bnrMap[self.ui.bannerComboBox.currentText()]
+        bnr = self.bnrMap[PurePath(self.ui.bannerComboBox.currentText())]
 
         bnr.index = self.ui.bannerLanguageComboBox.currentIndex()
         bnr.gameName = self.ui.bannerShortNameTextBox.toPlainText()
@@ -844,7 +867,18 @@ class Controller(QMainWindow):
             f"0x{self.iso.bootheader.diskID:02X}")
 
     @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE | JobDialogState.SHOW_COMPLETE_WHEN_MESSAGE | JobDialogState.RESET_PROGRESS_AFTER)
-    def save_all(self, showjob: bool = True):
+    def save_all_wrapped(self):
+        try:
+            self.save_all()
+        except ValueError:
+            return False, "Invalid input for DiskID and/or Version, which couldn't be serialized"
+
+        if self.is_from_iso():
+            return True, "ISO metadata saved successfully!"
+        else:
+            return True, "Root metadata saved successfully!"
+
+    def save_all(self):
         _boot = self.iso.bootheader
         _appldr = self.iso.apploader
 
@@ -854,50 +888,17 @@ class Controller(QMainWindow):
 
         diskID = self.ui.isoDiskIDTextBox.toPlainText()
         version = self.ui.isoVersionTextBox.toPlainText()
-        try:
-            if diskID.startswith("0x"):
-                _boot.diskID = int(diskID, 16)
-            else:
-                _boot.diskID = int(diskID)
-        except Exception:
-            dialog = JobFailedDialog(self)
-            dialog.setText(
-                f"Invalid input for `diskID` \"{diskID}\" could not be converted to int")
-            return False, dialog
 
-        try:
-            if version.startswith("0x"):
-                _boot.version = int(version, 16)
-            else:
-                _boot.version = int(version)
-        except Exception:
-            dialog = JobFailedDialog(self)
-            dialog.setText(
-                f"Invalid input for `version` \"{version}\" could not be converted to int")
-            return False, dialog
+        _boot.diskID = int(diskID, 0)
+        _boot.version = int(version, 0)
 
         _appldr.buildDate = self.ui.isoBuildDateTextBox.toPlainText()
         self.bnr_save_info()
 
-        if not showjob:
-            if self.is_from_iso():
-                self.iso.save_system_datav()
-            else:
-                self.iso.save_system_data()
-            return True, ""
+        if self.is_from_iso():
+            self.iso.save_system_datav()
         else:
-            if self.is_from_iso():
-                self.iso.save_system_datav()
-            else:
-                self.iso.save_system_data()
-
-            dialog = JobCompleteDialog(self)
-            if self.is_from_iso():
-                dialog.setText("ISO metadata saved successfully!")
-            else:
-                dialog.setText("Root information saved successfully!")
-
-            return True, dialog
+            self.iso.save_system_data()
 
     def reset_all(self):
         self.ui.setupUi(self)
@@ -1188,52 +1189,39 @@ class Controller(QMainWindow):
             parent.addChild(treeNode)
 
     @staticmethod
-    def _iso_start_callback(jobSize: int) -> None:
+    def _iso_job_start_callback(jobName: str, jobSize: int) -> None:
         controller = Controller.get_instance()
+        controller.jobSize = jobSize
+        controller.jobName = jobName
         controller.ui.operationProgressBar.setTextVisible(True)
         controller.ui.operationProgressBar.setMaximum(jobSize)
         controller.ui.operationProgressBar.setValue(0)
+        controller.ui.operationProgressBar.setFormat(
+            f"{controller.jobName} %p%")
 
     @staticmethod
-    def _iso_complete_callback(progress: int) -> None:
+    def _iso_task_start_callback(taskName: str, taskSize: int) -> None:
+        controller = Controller.get_instance()
+        controller.taskSize = taskSize
+        controller.taskName = taskName
+        controller.ui.operationProgressBar.setFormat(
+            f"{controller.jobName} - {taskName} %p%")
+
+    @staticmethod
+    def _iso_task_complete_callback() -> None:
         controller = Controller.get_instance()
         current = controller.ui.operationProgressBar.value()
-        controller.ui.operationProgressBar.setValue(current + progress)
+        controller.ui.operationProgressBar.setValue(
+            current + controller.taskSize)
+        controller.ui.operationProgressBar.setFormat(
+            f"{controller.jobName} %p%")
 
     @staticmethod
-    def _iso_exit_callback(completed: int) -> None:
+    def _iso_job_end_callback() -> None:
         controller = Controller.get_instance()
-        controller.ui.operationProgressBar.setValue(completed)
-
-
-class ProgressHandler(FlagThread):
-    def __init__(self, controller: Controller, t: FlagThread, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.controller = controller
-        self.watched = t
-        self.setObjectName(f"{self.__class__.__name__}.{t.getName()}")
-        ThreadManager.register(self)
-
-    def __del__(self):
-        ThreadManager.deregister(self)
-
-    def run(self):
-        self.controller.ui.operationProgressBar.setTextVisible(True)
-        self.controller.ui.operationProgressBar.setMaximum(
-            self.controller.iso.progress.jobSize)
-        self.controller.ui.operationProgressBar.setValue(0)
-
-        while self.controller.iso.progress.jobProgress < self.controller.iso.progress.jobSize and not self.watched.isFinished():
-            self.controller.ui.operationProgressBar.setValue(
-                self.controller.iso.progress.jobProgress)
-            time.sleep(0.01)
-
-        self.controller.ui.operationProgressBar.setValue(
-            self.controller.iso.progress.jobProgress)
-
-    def exit(self, retcode: int = 0):
-        super().exit(retcode)
-        ThreadManager.deregister(self)
+        controller.ui.operationProgressBar.setValue(
+            controller.ui.operationProgressBar.maximum()
+        )
 
 
 def _recursive_enable(parent):

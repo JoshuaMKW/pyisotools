@@ -479,7 +479,7 @@ class Ui_MainWindow():
             MainWindow.bnr_update_info)
         self.bannerComboBox.currentTextChanged.connect(
             MainWindow.bnr_update_info)
-        self.bannerSaveButton.clicked.connect(MainWindow.bnr_save_info)
+        self.bannerSaveButton.clicked.connect(MainWindow.bnr_save_info_wrapped)
         self.actionOpenRoot.triggered.connect(MainWindow.iso_load_root_dialog)
         self.actionClose.triggered.connect(MainWindow.reset_all)
         self.actionRebuild.triggered.connect(MainWindow.iso_build_dialog)
@@ -496,7 +496,7 @@ class Ui_MainWindow():
             MainWindow.file_system_context_menu)
         self.fileSystemTreeWidget.itemClicked.connect(
             MainWindow.file_system_set_fields)
-        self.actionSave.triggered.connect(MainWindow.save_all)
+        self.actionSave.triggered.connect(MainWindow.save_all_wrapped)
         self.actionDarkTheme.toggled.connect(MainWindow.update_dark)
 
         QMetaObject.connectSlotsByName(MainWindow)

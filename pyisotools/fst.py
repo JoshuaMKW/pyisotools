@@ -121,7 +121,7 @@ class FSTNode():
             if node.is_file():
                 yield node
 
-    def rdirs(self, includedOnly: bool = False) -> FSTNode:
+    def rdirs(self, includedOnly: bool = False) -> Iterator[FSTNode]:
         for node in self.children:
             if includedOnly and node._exclude:
                 continue
@@ -130,7 +130,7 @@ class FSTNode():
                 yield node
                 yield from node.rdirs(includedOnly=includedOnly)
 
-    def rfiles(self, includedOnly: bool = False) -> FSTNode:
+    def rfiles(self, includedOnly: bool = False) -> Iterator[FSTNode]:
         for node in self.children:
             if includedOnly and node._exclude:
                 continue
