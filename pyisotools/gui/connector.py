@@ -369,7 +369,7 @@ class Controller(QMainWindow):
                                  self.rootPath.parent if self.rootPath else Path.home()),
                              filter="All folders (*)")
 
-        dialog.setFileMode(QFileDialog.DirectoryOnly)
+        dialog.setFileMode(QFileDialog.Directory)
 
         if dialog.exec_() != QFileDialog.Accepted:
             return False, ""
@@ -444,7 +444,7 @@ class Controller(QMainWindow):
                              caption="Extract ISO To...",
                              directory=str(self.extractPath.parent if self.extractPath else Path.home()))
 
-        dialog.setFileMode(QFileDialog.DirectoryOnly)
+        dialog.setFileMode(QFileDialog.Directory)
 
         if dialog.exec_() != QFileDialog.Accepted:
             return False
@@ -462,7 +462,7 @@ class Controller(QMainWindow):
                              caption="Extract System Data To...",
                              directory=str(self.genericPath.parent if self.genericPath else Path.home()))
 
-        dialog.setFileMode(QFileDialog.DirectoryOnly)
+        dialog.setFileMode(QFileDialog.Directory)
 
         if dialog.exec_() != QFileDialog.Accepted:
             return False
@@ -1023,7 +1023,7 @@ class Controller(QMainWindow):
                              filter=filter)
 
         dialog.setAcceptMode(QFileDialog.AcceptOpen)
-        dialog.setFileMode(QFileDialog.DirectoryOnly)
+        dialog.setFileMode(QFileDialog.Directory)
 
         if dialog.exec_() != QFileDialog.Accepted:
             return False
