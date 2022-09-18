@@ -3,16 +3,16 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'pyisotools_updatecycAOF.ui'
+# Form generated from reading UI file 'pyisotools_updatecycAOF.ui'
 ##
-## Created by: Qt User Interface Compiler version 5.14.1
+# Created by: Qt User Interface Compiler version 5.14.1
 ##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
+# WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide2.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
-from PySide2.QtGui import QFont
-from PySide2.QtWidgets import *
+from PySide6.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import *
 
 
 class Ui_UpdateDialog():
@@ -55,8 +55,12 @@ class Ui_UpdateDialog():
     # setupUi
 
     def retranslateUi(self, Dialog):
-        Dialog.setWindowTitle(QCoreApplication.translate("Dialog", u"Dialog", None))
-        self.delayButton.setText(QCoreApplication.translate("Dialog", u"Remind Me Later", None))
-        self.updateButton.setText(QCoreApplication.translate("Dialog", u"Open GitHub", None))
-        self.updateLabel.setText(QCoreApplication.translate("Dialog", u"New Update Available!", None))
+        Dialog.setWindowTitle(
+            QCoreApplication.translate("Dialog", u"Dialog", None))
+        self.delayButton.setText(QCoreApplication.translate(
+            "Dialog", u"Remind Me Later", None))
+        self.updateButton.setText(
+            QCoreApplication.translate("Dialog", u"Open GitHub", None))
+        self.updateLabel.setText(QCoreApplication.translate(
+            "Dialog", u"New Update Available!", None))
     # retranslateUi

@@ -1,6 +1,6 @@
 from typing import Any, Callable, Tuple
 
-from PySide2.QtCore import QThread
+from PySide6.QtCore import QThread
 
 # pylint: disable=invalid-name
 

@@ -10,9 +10,9 @@
 # WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide2.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
-from PySide2.QtGui import QFont, QIcon
-from PySide2.QtWidgets import *
+from PySide6.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
+from PySide6.QtGui import QFont, QIcon, QAction
+from PySide6.QtWidgets import *
 
 from . import icons_rc
 from .customwidgets import FilteredPlainTextEdit
@@ -116,7 +116,7 @@ class Ui_MainWindow():
         self.fileSystemStartInfoTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
         self.fileSystemStartInfoTextBox.setReadOnly(True)
-        self.fileSystemStartInfoTextBox.setTabStopWidth(40)
+        self.fileSystemStartInfoTextBox.setTabStopDistance(40)
         self.fileSystemSizeInfoTextBox = FilteredPlainTextEdit(
             self.fileSystemGroupBox)
         self.fileSystemSizeInfoTextBox.setObjectName(
@@ -128,7 +128,7 @@ class Ui_MainWindow():
         self.fileSystemSizeInfoTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
         self.fileSystemSizeInfoTextBox.setReadOnly(True)
-        self.fileSystemSizeInfoTextBox.setTabStopWidth(40)
+        self.fileSystemSizeInfoTextBox.setTabStopDistance(40)
         self.fileSystemSizeInfoLabel = QLabel(self.fileSystemGroupBox)
         self.fileSystemSizeInfoLabel.setObjectName(u"fileSystemSizeInfoLabel")
         self.fileSystemSizeInfoLabel.setGeometry(QRect(190, 460, 71, 20))
@@ -157,7 +157,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.isoGameCodeTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.isoGameCodeTextBox.setTabStopWidth(40)
+        self.isoGameCodeTextBox.setTabStopDistance(40)
         self.isoNameTextBox = FilteredPlainTextEdit(self.isoDetailsGroupBox)
         self.isoNameTextBox.setObjectName(u"isoNameTextBox")
         self.isoNameTextBox.setEnabled(False)
@@ -166,7 +166,7 @@ class Ui_MainWindow():
         self.isoNameTextBox.setMouseTracking(False)
         self.isoNameTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.isoNameTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.isoNameTextBox.setTabStopWidth(40)
+        self.isoNameTextBox.setTabStopDistance(40)
         self.isoGameCodeLabel = QLabel(self.isoDetailsGroupBox)
         self.isoGameCodeLabel.setObjectName(u"isoGameCodeLabel")
         self.isoGameCodeLabel.setGeometry(QRect(10, 50, 71, 21))
@@ -184,7 +184,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.isoMakerCodeTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.isoMakerCodeTextBox.setTabStopWidth(40)
+        self.isoMakerCodeTextBox.setTabStopDistance(40)
         self.isoMakerCodeTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.isoMakerCodeTextBox.setMaxLength(2)
@@ -199,7 +199,7 @@ class Ui_MainWindow():
         self.isoDiskIDTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.isoDiskIDTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.isoDiskIDTextBox.setTabStopWidth(40)
+        self.isoDiskIDTextBox.setTabStopDistance(40)
         self.isoDiskIDTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.isoDiskIDTextBox.setMaxLength(4)
@@ -220,7 +220,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.isoBuildDateTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.isoBuildDateTextBox.setTabStopWidth(40)
+        self.isoBuildDateTextBox.setTabStopDistance(40)
         self.isoBuildDateTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.isoBuildDateTextBox.setMaxLength(10)
@@ -236,7 +236,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.isoVersionTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.isoVersionTextBox.setTabStopWidth(40)
+        self.isoVersionTextBox.setTabStopDistance(40)
         self.isoVersionTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.isoVersionTextBox.setMaxLength(4)
@@ -263,7 +263,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.bannerShortNameTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.bannerShortNameTextBox.setTabStopWidth(40)
+        self.bannerShortNameTextBox.setTabStopDistance(40)
         self.bannerShortNameTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerShortNameTextBox.setMaxLength(32)
@@ -276,7 +276,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.bannerShortMakerTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.bannerShortMakerTextBox.setTabStopWidth(40)
+        self.bannerShortMakerTextBox.setTabStopDistance(40)
         self.bannerShortMakerTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerShortMakerTextBox.setMaxLength(32)
@@ -288,7 +288,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.bannerLongNameTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.bannerLongNameTextBox.setTabStopWidth(40)
+        self.bannerLongNameTextBox.setTabStopDistance(40)
         self.bannerLongNameTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerLongNameTextBox.setMaxLength(64)
@@ -301,7 +301,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.bannerLongMakerTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.bannerLongMakerTextBox.setTabStopWidth(40)
+        self.bannerLongMakerTextBox.setTabStopDistance(40)
         self.bannerLongMakerTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerLongMakerTextBox.setMaxLength(64)
@@ -313,7 +313,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.bannerDescTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.bannerDescTextBox.setTabStopWidth(40)
+        self.bannerDescTextBox.setTabStopDistance(40)
         self.bannerDescTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal | FilteredPlainTextEdit.ScrollVertical)
         self.bannerDescTextBox.setMaxLength(128)
@@ -360,7 +360,7 @@ class Ui_MainWindow():
             Qt.ScrollBarAlwaysOff)
         self.bannerVersionTextBox.setHorizontalScrollBarPolicy(
             Qt.ScrollBarAlwaysOff)
-        self.bannerVersionTextBox.setTabStopWidth(40)
+        self.bannerVersionTextBox.setTabStopDistance(40)
         self.bannerVersionTextBox.setScrollPolicy(
             FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerVersionTextBox.setMaxLength(4)
@@ -497,7 +497,7 @@ class Ui_MainWindow():
         self.fileSystemTreeWidget.itemClicked.connect(
             MainWindow.file_system_set_fields)
         self.actionSave.triggered.connect(MainWindow.save_all)
-        self.actionDarkTheme.toggled.connect(MainWindow.update_theme)
+        self.actionDarkTheme.toggled.connect(MainWindow.update_dark)
 
         QMetaObject.connectSlotsByName(MainWindow)
     # setupUi

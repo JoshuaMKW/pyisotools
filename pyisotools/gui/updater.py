@@ -6,7 +6,7 @@ from typing import Iterable, List, Optional
 
 from github import Github
 from github.GitRelease import GitRelease
-from PySide2.QtCore import Signal
+from PySide6.QtCore import Signal
 
 try:
     from .. import __version__

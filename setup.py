@@ -9,7 +9,7 @@ with open("requirements.txt", "r", encoding="utf-8") as r:
 
 setuptools.setup(
     name='pyisotools',
-    version=pyisotools.__version__,    
+    version=pyisotools.__version__,
     description='Simple python library for extracting and rebuilding ISOs',
     long_description=longDescription,
     long_description_content_type="text/markdown",

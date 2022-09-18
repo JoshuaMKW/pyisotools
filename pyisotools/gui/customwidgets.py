@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from PySide2.QtCore import Qt
-from PySide2.QtGui import (QKeyEvent, QKeySequence, QRegExpValidator,
+from PySide6.QtCore import Qt
+from PySide6.QtGui import (QKeyEvent, QKeySequence, QRegularExpressionValidator,
                            QTextOption)
-from PySide2.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem
+from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem
 
 from ..fst import FSTNode
 
 # pylint: disable=invalid-name
 # pylint: disable=no-member
+
+
 class FilteredPlainTextEdit(QPlainTextEdit):
 
     class ScrollPolicy(IntEnum):
@@ -43,7 +45,7 @@ class FilteredPlainTextEdit(QPlainTextEdit):
     def setMaxLength(self, length: int):
         self._maxlength = length
 
-    def setValidator(self, validator: QRegExpValidator):
+    def setValidator(self, validator: QRegularExpressionValidator):
         self._validator = validator
 
     def keyPressEvent(self, e: QKeyEvent):

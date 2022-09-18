@@ -16,9 +16,9 @@ from typing import Callable, Dict, Iterable, Tuple, Union
 
 from PIL import Image, ImageQt
 from pyisotools.gui.mainwindow import Ui_MainWindow
-from PySide2.QtCore import QEvent, Qt
-from PySide2.QtGui import QIcon
-from PySide2.QtWidgets import (QAction, QDialog, QFileDialog, QFrame,
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QIcon, QAction
+from PySide6.QtWidgets import (QDialog, QFileDialog, QFrame,
                                QMainWindow, QMenu, QMessageBox)
 
 from .. import __version__
@@ -225,7 +225,7 @@ class NodeFieldDialog(QDialog):
 class Controller(QMainWindow):
     class Themes(Enum):
         LIGHT = 0
-        DARK = 0
+        DARK = 1
 
     _singleInstance: Controller = None
 
@@ -656,8 +656,7 @@ class Controller(QMainWindow):
                     break
 
             if bnrNode is None:
-                print("Node not found for BNR save")
-                return
+                raise RuntimeError("Node not found for BNR save")
 
             if bnrNode.name == "opening.bnr":
                 self.iso.bnr = bnr
@@ -668,8 +667,7 @@ class Controller(QMainWindow):
         else:
             bnrPath = self.rootPath / "files" / self.ui.bannerComboBox.currentText()
             if not bnrPath.is_file():
-                print("Not a file for BNR save")
-                return
+                raise RuntimeError("Not a file for BNR save")
 
             bnrPath.write_bytes(bnr._rawdata.getvalue())
 
@@ -755,8 +753,21 @@ class Controller(QMainWindow):
         else:
             self.theme = Controller.Themes.LIGHT
 
+    def update_dark(self, isDark: bool):
+        if isDark:
+            theme = Controller.Themes.DARK
+        else:
+            theme = Controller.Themes.LIGHT
+        self.update_theme(theme)
+
     def update_theme(self, theme: Controller.Themes):
         import qdarkstyle
+
+        if theme == Controller.Themes.DARK:
+            self.ui.actionDarkTheme.blockSignals(True)
+            self.ui.actionDarkTheme.setChecked(True)
+            self.ui.actionDarkTheme.blockSignals(False)
+
         if theme == Controller.Themes.LIGHT:
             self.theme = Controller.Themes.LIGHT
             self.setStyleSheet("")
@@ -764,7 +775,7 @@ class Controller(QMainWindow):
             self.ui.bannerHFrameLine.setStyleSheet("")
         else:
             self.theme = Controller.Themes.DARK
-            self.setStyleSheet(qdarkstyle.load_stylesheet())
+            self.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyside6"))
             self.ui.bannerImageView.setStyleSheet("QLabel {\n"
                                                   "  background-color: #19232D\n;"
                                                   "  border: 1px solid #32414B\n;"
@@ -890,7 +901,7 @@ class Controller(QMainWindow):
 
     def reset_all(self):
         self.ui.setupUi(self)
-        self.update_theme(Controller.Themes.LIGHT)
+        self.update_theme(self.theme)
         self.setWindowTitle(self.get_window_title())
 
     def load_file_system(self):
