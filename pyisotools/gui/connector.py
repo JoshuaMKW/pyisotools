@@ -392,10 +392,12 @@ class Controller(QMainWindow):
             iso.onVirtualJobExit = self._iso_exit_callback
             self.iso = iso
 
-            self.bnrMap = self.iso.bnr
-            self.ui.bannerComboBox.clear()
-            self.ui.bannerComboBox.addItems(sorted(
-                [p.name for p in self.iso.rchildren() if fnmatch(p.name, "*.bnr")], key=str.lower))
+            # for node in self.iso.rchildren():
+            #     if node.is_file() and node.name.endswith(".bnr"):
+            #         f.seek(node._fileoffset)
+            #         self.bnrMap[node.path] = BNR.from_data(
+            #             f, size=node.size)
+
             self.ui.actionClose.setEnabled(True)
             self.ui.actionSave.setEnabled(True)
             self.ui.actionRebuild.setEnabled(True)
@@ -501,9 +503,10 @@ class Controller(QMainWindow):
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
+        currentBNR = self.bnrMap[self.ui.bannerComboBox.currentText()]
         if self.bnrImagePath.is_file():
             if self.bnrImagePath.suffix == ".bnr":
-                self.bnrMap.rawImage = BytesIO(
+                currentBNR.rawImage = BytesIO(
                     self.bnrImagePath.read_bytes()[0x20:0x1820])
                 self.bnr_update_info()
             else:
@@ -512,8 +515,8 @@ class Controller(QMainWindow):
                         dialog = JobWarningDialog(
                             f"Resizing image of size {image.size} to match BNR size (96, 32)", self)
                         dialog.exec_()
-                    self.bnrMap.rawImage = image
-                pixmap = ImageQt.toqpixmap(self.bnrMap.getImage())
+                    currentBNR.rawImage = image
+                pixmap = ImageQt.toqpixmap(currentBNR.get_image())
                 pixmap = pixmap.scaled(self.ui.bannerImageView.geometry().width(
                 ) - 1, self.ui.bannerImageView.geometry().height() - 1, Qt.KeepAspectRatio)
                 self.ui.bannerImageView.setPixmap(pixmap)
@@ -538,7 +541,8 @@ class Controller(QMainWindow):
 
         self.bnrImagePath = Path(dialog.selectedFiles()[0]).resolve()
 
-        image = self.bnrMap.getImage()
+        currentBNR = self.bnrMap[self.ui.bannerComboBox.currentText()]
+        image = currentBNR.get_image()
         image.save(self.bnrImagePath)
 
         return True
@@ -556,13 +560,21 @@ class Controller(QMainWindow):
         self.ui.bannerImageView.clear()
         self.ui.bannerImageView.setFrameShape(QFrame.Shape.Box)
 
+        self.bnrMap.clear()
+
         if self._fromIso:
             with self.iso.isoPath.open("rb") as f:
                 for node in self.iso.rchildren():
                     if node.is_file() and node.name.endswith(".bnr"):
                         f.seek(node._fileoffset)
-                        self.bnrMap[node.path] = BNR.from_data(
+                        self.bnrMap[str(node.path)] = BNR.from_data(
                             f, size=node.size)
+        else:
+            for p in self.rootPath.rglob("*.bnr"):
+                if p.is_file():
+                    with p.open("rb") as pp:
+                        self.bnrMap[str(p.relative_to(self.rootPath / "files"))] = BNR.from_data(
+                            pp, size=p.stat().st_size)
 
         self.ui.bannerComboBox.clear()
         self.ui.bannerComboBox.addItems(sorted(
@@ -635,6 +647,31 @@ class Controller(QMainWindow):
         bnr.developerName = self.ui.bannerShortMakerTextBox.toPlainText()
         bnr.developerTitle = self.ui.bannerLongMakerTextBox.toPlainText()
         bnr.gameDescription = self.ui.bannerDescTextBox.toPlainText()
+
+        if self._fromIso:
+            bnrNode = None
+            for child in self.iso.rchildren():
+                if child.path == self.ui.bannerComboBox.currentText():
+                    bnrNode = child
+                    break
+
+            if bnrNode is None:
+                print("Node not found for BNR save")
+                return
+
+            if bnrNode.name == "opening.bnr":
+                self.iso.bnr = bnr
+
+            with self.iso.isoPath.open("r+b") as f:
+                f.seek(bnrNode._fileoffset, 0)
+                f.write(bnr._rawdata.getvalue())
+        else:
+            bnrPath = self.rootPath / "files" / self.ui.bannerComboBox.currentText()
+            if not bnrPath.is_file():
+                print("Not a file for BNR save")
+                return
+
+            bnrPath.write_bytes(bnr._rawdata.getvalue())
 
     def help_about(self):
         desc = "".join(["pyisotools is a tool for extracting and building Gamecube ISOs.\n",

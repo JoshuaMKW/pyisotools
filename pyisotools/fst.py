@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Optional, Union
+from typing import Iterator, Optional, Union
 
 
 class FileAccessOnFolderError(Exception):
@@ -140,7 +140,7 @@ class FSTNode():
             else:
                 yield from node.rfiles(includedOnly=includedOnly)
 
-    def rchildren(self, includedOnly: bool = False) -> FSTNode:
+    def rchildren(self, includedOnly: bool = False) -> Iterator[FSTNode]:
         for node in self.children:
             if includedOnly and node._exclude:
                 continue
@@ -167,7 +167,7 @@ class FSTNode():
         self._parent = node
 
     @property
-    def children(self) -> FSTNode:
+    def children(self) -> Iterator[FSTNode]:
         for child in sorted(self._children.values(), key=lambda x: x.name.upper()):
             yield child
 

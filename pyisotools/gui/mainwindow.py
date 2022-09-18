@@ -3,11 +3,11 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'pyisotools_maindUOHCd.ui'
+# Form generated from reading UI file 'pyisotools_maindUOHCd.ui'
 ##
-## Created by: Qt User Interface Compiler version 5.14.1
+# Created by: Qt User Interface Compiler version 5.14.1
 ##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
+# WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
 from PySide2.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
@@ -17,6 +17,7 @@ from PySide2.QtWidgets import *
 from . import icons_rc
 from .customwidgets import FilteredPlainTextEdit
 
+
 class Ui_MainWindow():
     def setupUi(self, MainWindow):
         if MainWindow.objectName():
@@ -25,7 +26,8 @@ class Ui_MainWindow():
         sizePolicy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            MainWindow.sizePolicy().hasHeightForWidth())
         MainWindow.setSizePolicy(sizePolicy)
         MainWindow.setMinimumSize(QSize(841, 561))
         MainWindow.setMaximumSize(QSize(841, 561))
@@ -81,7 +83,7 @@ class Ui_MainWindow():
         self.fileSystemGroupBox.setFont(font)
         self.fileSystemTreeWidget = QTreeWidget(self.fileSystemGroupBox)
         __qtreewidgetitem = QTreeWidgetItem()
-        __qtreewidgetitem.setText(0, u"1");
+        __qtreewidgetitem.setText(0, u"1")
         self.fileSystemTreeWidget.setHeaderItem(__qtreewidgetitem)
         self.fileSystemTreeWidget.setObjectName(u"fileSystemTreeWidget")
         self.fileSystemTreeWidget.setGeometry(QRect(10, 20, 341, 431))
@@ -94,27 +96,37 @@ class Ui_MainWindow():
         self.fileSystemTreeWidget.setRootIsDecorated(True)
         self.fileSystemTreeWidget.setHeaderHidden(True)
         self.fileSystemStartInfoLabel = QLabel(self.fileSystemGroupBox)
-        self.fileSystemStartInfoLabel.setObjectName(u"fileSystemStartInfoLabel")
+        self.fileSystemStartInfoLabel.setObjectName(
+            u"fileSystemStartInfoLabel")
         self.fileSystemStartInfoLabel.setGeometry(QRect(10, 460, 71, 20))
         self.fileSystemStartInfoLabel.setFont(font1)
         self.fileSystemStartInfoLabel.setFrameShape(QFrame.NoFrame)
         self.fileSystemStartInfoLabel.setFrameShadow(QFrame.Plain)
         self.fileSystemStartInfoLabel.setTextFormat(Qt.PlainText)
-        self.fileSystemStartInfoLabel.setAlignment(Qt.AlignLeading|Qt.AlignLeft|Qt.AlignVCenter)
-        self.fileSystemStartInfoTextBox = FilteredPlainTextEdit(self.fileSystemGroupBox)
-        self.fileSystemStartInfoTextBox.setObjectName(u"fileSystemStartInfoTextBox")
+        self.fileSystemStartInfoLabel.setAlignment(
+            Qt.AlignLeading | Qt.AlignLeft | Qt.AlignVCenter)
+        self.fileSystemStartInfoTextBox = FilteredPlainTextEdit(
+            self.fileSystemGroupBox)
+        self.fileSystemStartInfoTextBox.setObjectName(
+            u"fileSystemStartInfoTextBox")
         self.fileSystemStartInfoTextBox.setGeometry(QRect(90, 460, 81, 22))
         self.fileSystemStartInfoTextBox.setFont(font1)
-        self.fileSystemStartInfoTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.fileSystemStartInfoTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.fileSystemStartInfoTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.fileSystemStartInfoTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.fileSystemStartInfoTextBox.setReadOnly(True)
         self.fileSystemStartInfoTextBox.setTabStopWidth(40)
-        self.fileSystemSizeInfoTextBox = FilteredPlainTextEdit(self.fileSystemGroupBox)
-        self.fileSystemSizeInfoTextBox.setObjectName(u"fileSystemSizeInfoTextBox")
+        self.fileSystemSizeInfoTextBox = FilteredPlainTextEdit(
+            self.fileSystemGroupBox)
+        self.fileSystemSizeInfoTextBox.setObjectName(
+            u"fileSystemSizeInfoTextBox")
         self.fileSystemSizeInfoTextBox.setGeometry(QRect(270, 460, 81, 22))
         self.fileSystemSizeInfoTextBox.setFont(font1)
-        self.fileSystemSizeInfoTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.fileSystemSizeInfoTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.fileSystemSizeInfoTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.fileSystemSizeInfoTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.fileSystemSizeInfoTextBox.setReadOnly(True)
         self.fileSystemSizeInfoTextBox.setTabStopWidth(40)
         self.fileSystemSizeInfoLabel = QLabel(self.fileSystemGroupBox)
@@ -125,7 +137,8 @@ class Ui_MainWindow():
         self.fileSystemSizeInfoLabel.setFrameShape(QFrame.NoFrame)
         self.fileSystemSizeInfoLabel.setFrameShadow(QFrame.Plain)
         self.fileSystemSizeInfoLabel.setTextFormat(Qt.PlainText)
-        self.fileSystemSizeInfoLabel.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
+        self.fileSystemSizeInfoLabel.setAlignment(
+            Qt.AlignRight | Qt.AlignTrailing | Qt.AlignVCenter)
         self.isoDetailsGroupBox = QGroupBox(self.centralwidget)
         self.isoDetailsGroupBox.setObjectName(u"isoDetailsGroupBox")
         self.isoDetailsGroupBox.setEnabled(False)
@@ -135,12 +148,15 @@ class Ui_MainWindow():
         self.isoMakerCodeLabel.setObjectName(u"isoMakerCodeLabel")
         self.isoMakerCodeLabel.setGeometry(QRect(10, 80, 71, 21))
         self.isoMakerCodeLabel.setFont(font1)
-        self.isoGameCodeTextBox = FilteredPlainTextEdit(self.isoDetailsGroupBox)
+        self.isoGameCodeTextBox = FilteredPlainTextEdit(
+            self.isoDetailsGroupBox)
         self.isoGameCodeTextBox.setObjectName(u"isoGameCodeTextBox")
         self.isoGameCodeTextBox.setGeometry(QRect(90, 50, 111, 22))
         self.isoGameCodeTextBox.setFont(font1)
-        self.isoGameCodeTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.isoGameCodeTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.isoGameCodeTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.isoGameCodeTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.isoGameCodeTextBox.setTabStopWidth(40)
         self.isoNameTextBox = FilteredPlainTextEdit(self.isoDetailsGroupBox)
         self.isoNameTextBox.setObjectName(u"isoNameTextBox")
@@ -159,14 +175,18 @@ class Ui_MainWindow():
         self.isoNameLabel.setObjectName(u"isoNameLabel")
         self.isoNameLabel.setGeometry(QRect(10, 20, 71, 21))
         self.isoNameLabel.setFont(font1)
-        self.isoMakerCodeTextBox = FilteredPlainTextEdit(self.isoDetailsGroupBox)
+        self.isoMakerCodeTextBox = FilteredPlainTextEdit(
+            self.isoDetailsGroupBox)
         self.isoMakerCodeTextBox.setObjectName(u"isoMakerCodeTextBox")
         self.isoMakerCodeTextBox.setGeometry(QRect(90, 80, 111, 22))
         self.isoMakerCodeTextBox.setFont(font1)
-        self.isoMakerCodeTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.isoMakerCodeTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.isoMakerCodeTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.isoMakerCodeTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.isoMakerCodeTextBox.setTabStopWidth(40)
-        self.isoMakerCodeTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.isoMakerCodeTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.isoMakerCodeTextBox.setMaxLength(2)
         self.isoDiskIDLabel = QLabel(self.isoDetailsGroupBox)
         self.isoDiskIDLabel.setObjectName(u"isoDiskIDLabel")
@@ -177,9 +197,11 @@ class Ui_MainWindow():
         self.isoDiskIDTextBox.setGeometry(QRect(300, 110, 141, 22))
         self.isoDiskIDTextBox.setFont(font1)
         self.isoDiskIDTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.isoDiskIDTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.isoDiskIDTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.isoDiskIDTextBox.setTabStopWidth(40)
-        self.isoDiskIDTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.isoDiskIDTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.isoDiskIDTextBox.setMaxLength(4)
         self.isoRegionLabel = QLabel(self.isoDetailsGroupBox)
         self.isoRegionLabel.setObjectName(u"isoRegionLabel")
@@ -189,14 +211,18 @@ class Ui_MainWindow():
         self.isoBuildDateLabel.setObjectName(u"isoBuildDateLabel")
         self.isoBuildDateLabel.setGeometry(QRect(230, 80, 61, 21))
         self.isoBuildDateLabel.setFont(font1)
-        self.isoBuildDateTextBox = FilteredPlainTextEdit(self.isoDetailsGroupBox)
+        self.isoBuildDateTextBox = FilteredPlainTextEdit(
+            self.isoDetailsGroupBox)
         self.isoBuildDateTextBox.setObjectName(u"isoBuildDateTextBox")
         self.isoBuildDateTextBox.setGeometry(QRect(300, 80, 141, 22))
         self.isoBuildDateTextBox.setFont(font1)
-        self.isoBuildDateTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.isoBuildDateTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.isoBuildDateTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.isoBuildDateTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.isoBuildDateTextBox.setTabStopWidth(40)
-        self.isoBuildDateTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.isoBuildDateTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.isoBuildDateTextBox.setMaxLength(10)
         self.isoVersionLabel = QLabel(self.isoDetailsGroupBox)
         self.isoVersionLabel.setObjectName(u"isoVersionLabel")
@@ -206,10 +232,13 @@ class Ui_MainWindow():
         self.isoVersionTextBox.setObjectName(u"isoVersionTextBox")
         self.isoVersionTextBox.setGeometry(QRect(90, 110, 111, 22))
         self.isoVersionTextBox.setFont(font1)
-        self.isoVersionTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.isoVersionTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.isoVersionTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.isoVersionTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.isoVersionTextBox.setTabStopWidth(40)
-        self.isoVersionTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.isoVersionTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.isoVersionTextBox.setMaxLength(4)
         self.isoRegionComboBox = QComboBox(self.isoDetailsGroupBox)
         self.isoRegionComboBox.addItem("")
@@ -225,50 +254,68 @@ class Ui_MainWindow():
         self.bannerGroupBox.setGeometry(QRect(10, 150, 451, 351))
         self.bannerGroupBox.setFont(font)
         self.bannerGroupBox.setAutoFillBackground(True)
-        self.bannerShortNameTextBox = FilteredPlainTextEdit(self.bannerGroupBox)
+        self.bannerShortNameTextBox = FilteredPlainTextEdit(
+            self.bannerGroupBox)
         self.bannerShortNameTextBox.setObjectName(u"bannerShortNameTextBox")
         self.bannerShortNameTextBox.setGeometry(QRect(90, 180, 351, 22))
         self.bannerShortNameTextBox.setFont(font1)
-        self.bannerShortNameTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.bannerShortNameTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.bannerShortNameTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.bannerShortNameTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.bannerShortNameTextBox.setTabStopWidth(40)
-        self.bannerShortNameTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.bannerShortNameTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerShortNameTextBox.setMaxLength(32)
-        self.bannerShortMakerTextBox = FilteredPlainTextEdit(self.bannerGroupBox)
+        self.bannerShortMakerTextBox = FilteredPlainTextEdit(
+            self.bannerGroupBox)
         self.bannerShortMakerTextBox.setObjectName(u"bannerShortMakerTextBox")
         self.bannerShortMakerTextBox.setGeometry(QRect(90, 210, 351, 22))
         self.bannerShortMakerTextBox.setFont(font1)
-        self.bannerShortMakerTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.bannerShortMakerTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.bannerShortMakerTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.bannerShortMakerTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.bannerShortMakerTextBox.setTabStopWidth(40)
-        self.bannerShortMakerTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.bannerShortMakerTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerShortMakerTextBox.setMaxLength(32)
         self.bannerLongNameTextBox = FilteredPlainTextEdit(self.bannerGroupBox)
         self.bannerLongNameTextBox.setObjectName(u"bannerLongNameTextBox")
         self.bannerLongNameTextBox.setGeometry(QRect(90, 240, 351, 22))
         self.bannerLongNameTextBox.setFont(font1)
-        self.bannerLongNameTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.bannerLongNameTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.bannerLongNameTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.bannerLongNameTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.bannerLongNameTextBox.setTabStopWidth(40)
-        self.bannerLongNameTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.bannerLongNameTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerLongNameTextBox.setMaxLength(64)
-        self.bannerLongMakerTextBox = FilteredPlainTextEdit(self.bannerGroupBox)
+        self.bannerLongMakerTextBox = FilteredPlainTextEdit(
+            self.bannerGroupBox)
         self.bannerLongMakerTextBox.setObjectName(u"bannerLongMakerTextBox")
         self.bannerLongMakerTextBox.setGeometry(QRect(90, 270, 351, 22))
         self.bannerLongMakerTextBox.setFont(font1)
-        self.bannerLongMakerTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.bannerLongMakerTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.bannerLongMakerTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.bannerLongMakerTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.bannerLongMakerTextBox.setTabStopWidth(40)
-        self.bannerLongMakerTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.bannerLongMakerTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerLongMakerTextBox.setMaxLength(64)
         self.bannerDescTextBox = FilteredPlainTextEdit(self.bannerGroupBox)
         self.bannerDescTextBox.setObjectName(u"bannerDescTextBox")
         self.bannerDescTextBox.setGeometry(QRect(90, 300, 351, 41))
         self.bannerDescTextBox.setFont(font1)
-        self.bannerDescTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.bannerDescTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.bannerDescTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.bannerDescTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.bannerDescTextBox.setTabStopWidth(40)
-        self.bannerDescTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal | FilteredPlainTextEdit.ScrollVertical)
+        self.bannerDescTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal | FilteredPlainTextEdit.ScrollVertical)
         self.bannerDescTextBox.setMaxLength(128)
         self.bannerShortNameLabel = QLabel(self.bannerGroupBox)
         self.bannerShortNameLabel.setObjectName(u"bannerShortNameLabel")
@@ -294,7 +341,8 @@ class Ui_MainWindow():
         self.bannerVersionLabel.setObjectName(u"bannerVersionLabel")
         self.bannerVersionLabel.setGeometry(QRect(230, 50, 61, 21))
         self.bannerVersionLabel.setFont(font1)
-        self.bannerVersionLabel.setAlignment(Qt.AlignLeading|Qt.AlignLeft|Qt.AlignVCenter)
+        self.bannerVersionLabel.setAlignment(
+            Qt.AlignLeading | Qt.AlignLeft | Qt.AlignVCenter)
         self.bannerHFrameLine = QFrame(self.bannerGroupBox)
         self.bannerHFrameLine.setObjectName(u"bannerHFrameLine")
         self.bannerHFrameLine.setEnabled(False)
@@ -308,16 +356,20 @@ class Ui_MainWindow():
         self.bannerVersionTextBox.setObjectName(u"bannerVersionTextBox")
         self.bannerVersionTextBox.setGeometry(QRect(300, 50, 141, 22))
         self.bannerVersionTextBox.setFont(font1)
-        self.bannerVersionTextBox.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.bannerVersionTextBox.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.bannerVersionTextBox.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.bannerVersionTextBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
         self.bannerVersionTextBox.setTabStopWidth(40)
-        self.bannerVersionTextBox.setScrollPolicy(FilteredPlainTextEdit.ScrollHorizontal)
+        self.bannerVersionTextBox.setScrollPolicy(
+            FilteredPlainTextEdit.ScrollHorizontal)
         self.bannerVersionTextBox.setMaxLength(4)
         self.bannerLanguageLabel = QLabel(self.bannerGroupBox)
         self.bannerLanguageLabel.setObjectName(u"bannerLanguageLabel")
         self.bannerLanguageLabel.setGeometry(QRect(230, 20, 61, 21))
         self.bannerLanguageLabel.setFont(font1)
-        self.bannerLanguageLabel.setAlignment(Qt.AlignLeading|Qt.AlignLeft|Qt.AlignVCenter)
+        self.bannerLanguageLabel.setAlignment(
+            Qt.AlignLeading | Qt.AlignLeft | Qt.AlignVCenter)
         self.bannerLanguageComboBox = QComboBox(self.bannerGroupBox)
         self.bannerLanguageComboBox.addItem("")
         self.bannerLanguageComboBox.addItem("")
@@ -386,14 +438,20 @@ class Ui_MainWindow():
         QWidget.setTabOrder(self.isoBuildDateTextBox, self.isoDiskIDTextBox)
         QWidget.setTabOrder(self.isoDiskIDTextBox, self.bannerImportButton)
         QWidget.setTabOrder(self.bannerImportButton, self.bannerExportButton)
-        QWidget.setTabOrder(self.bannerExportButton, self.bannerLanguageComboBox)
-        QWidget.setTabOrder(self.bannerLanguageComboBox, self.bannerVersionTextBox)
+        QWidget.setTabOrder(self.bannerExportButton,
+                            self.bannerLanguageComboBox)
+        QWidget.setTabOrder(self.bannerLanguageComboBox,
+                            self.bannerVersionTextBox)
         QWidget.setTabOrder(self.bannerVersionTextBox, self.bannerSaveButton)
         QWidget.setTabOrder(self.bannerSaveButton, self.bannerShortNameTextBox)
-        QWidget.setTabOrder(self.bannerShortNameTextBox, self.bannerShortMakerTextBox)
-        QWidget.setTabOrder(self.bannerShortMakerTextBox, self.bannerLongNameTextBox)
-        QWidget.setTabOrder(self.bannerLongNameTextBox, self.bannerLongMakerTextBox)
-        QWidget.setTabOrder(self.bannerLongMakerTextBox, self.bannerDescTextBox)
+        QWidget.setTabOrder(self.bannerShortNameTextBox,
+                            self.bannerShortMakerTextBox)
+        QWidget.setTabOrder(self.bannerShortMakerTextBox,
+                            self.bannerLongNameTextBox)
+        QWidget.setTabOrder(self.bannerLongNameTextBox,
+                            self.bannerLongMakerTextBox)
+        QWidget.setTabOrder(self.bannerLongMakerTextBox,
+                            self.bannerDescTextBox)
         QWidget.setTabOrder(self.bannerDescTextBox, self.fileSystemTreeWidget)
 
         self.menubar.addAction(self.menuFile.menuAction())
@@ -417,20 +475,27 @@ class Ui_MainWindow():
         self.retranslateUi(MainWindow)
         self.bannerImportButton.released.connect(MainWindow.bnr_load_dialog)
         self.bannerExportButton.released.connect(MainWindow.bnr_save_dialog)
-        self.bannerLanguageComboBox.currentTextChanged.connect(MainWindow.bnr_update_info)
-        self.bannerComboBox.currentTextChanged.connect(MainWindow.bnr_update_info)
-        self.bannerSaveButton.toggled.connect(MainWindow.bnr_save_info)
+        self.bannerLanguageComboBox.currentTextChanged.connect(
+            MainWindow.bnr_update_info)
+        self.bannerComboBox.currentTextChanged.connect(
+            MainWindow.bnr_update_info)
+        self.bannerSaveButton.clicked.connect(MainWindow.bnr_save_info)
         self.actionOpenRoot.triggered.connect(MainWindow.iso_load_root_dialog)
         self.actionClose.triggered.connect(MainWindow.reset_all)
         self.actionRebuild.triggered.connect(MainWindow.iso_build_dialog)
         self.actionExtract.triggered.connect(MainWindow.iso_extract_dialog)
         self.actionAbout.triggered.connect(MainWindow.help_about)
-        self.actionFile_Alignment.triggered.connect(MainWindow.help_file_alignment)
-        self.actionFile_Position.triggered.connect(MainWindow.help_file_position)
-        self.actionFile_Exclusion.triggered.connect(MainWindow.help_file_exclusion)
+        self.actionFile_Alignment.triggered.connect(
+            MainWindow.help_file_alignment)
+        self.actionFile_Position.triggered.connect(
+            MainWindow.help_file_position)
+        self.actionFile_Exclusion.triggered.connect(
+            MainWindow.help_file_exclusion)
         self.actionOpenISO.triggered.connect(MainWindow.iso_load_iso_dialog)
-        self.fileSystemTreeWidget.customContextMenuRequested.connect(MainWindow.file_system_context_menu)
-        self.fileSystemTreeWidget.itemClicked.connect(MainWindow.file_system_set_fields)
+        self.fileSystemTreeWidget.customContextMenuRequested.connect(
+            MainWindow.file_system_context_menu)
+        self.fileSystemTreeWidget.itemClicked.connect(
+            MainWindow.file_system_set_fields)
         self.actionSave.triggered.connect(MainWindow.save_all)
         self.actionDarkTheme.toggled.connect(MainWindow.update_theme)
 
@@ -438,76 +503,131 @@ class Ui_MainWindow():
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"pyisotools", None))
-        self.actionOpenRoot.setText(QCoreApplication.translate("MainWindow", u"Open Root", None))
-#if QT_CONFIG(shortcut)
-        self.actionOpenRoot.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+Shift+O", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate(
+            "MainWindow", u"pyisotools", None))
+        self.actionOpenRoot.setText(
+            QCoreApplication.translate("MainWindow", u"Open Root", None))
+# if QT_CONFIG(shortcut)
+        self.actionOpenRoot.setShortcut(
+            QCoreApplication.translate("MainWindow", u"Ctrl+Shift+O", None))
 #endif // QT_CONFIG(shortcut)
-        self.actionClose.setText(QCoreApplication.translate("MainWindow", u"Close", None))
-#if QT_CONFIG(shortcut)
-        self.actionClose.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+Shift+C", None))
+        self.actionClose.setText(
+            QCoreApplication.translate("MainWindow", u"Close", None))
+# if QT_CONFIG(shortcut)
+        self.actionClose.setShortcut(QCoreApplication.translate(
+            "MainWindow", u"Ctrl+Shift+C", None))
 #endif // QT_CONFIG(shortcut)
-        self.actionRebuild.setText(QCoreApplication.translate("MainWindow", u"Build", None))
-#if QT_CONFIG(shortcut)
-        self.actionRebuild.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+B", None))
+        self.actionRebuild.setText(
+            QCoreApplication.translate("MainWindow", u"Build", None))
+# if QT_CONFIG(shortcut)
+        self.actionRebuild.setShortcut(
+            QCoreApplication.translate("MainWindow", u"Ctrl+B", None))
 #endif // QT_CONFIG(shortcut)
-        self.actionFile_Alignment.setText(QCoreApplication.translate("MainWindow", u"File Alignment", None))
-        self.actionFile_Position.setText(QCoreApplication.translate("MainWindow", u"File Position", None))
-        self.actionFile_Exclusion.setText(QCoreApplication.translate("MainWindow", u"File Exclusion", None))
-        self.actionAbout.setText(QCoreApplication.translate("MainWindow", u"About", None))
-        self.actionExtract.setText(QCoreApplication.translate("MainWindow", u"Extract", None))
-#if QT_CONFIG(shortcut)
-        self.actionExtract.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+E", None))
+        self.actionFile_Alignment.setText(
+            QCoreApplication.translate("MainWindow", u"File Alignment", None))
+        self.actionFile_Position.setText(
+            QCoreApplication.translate("MainWindow", u"File Position", None))
+        self.actionFile_Exclusion.setText(
+            QCoreApplication.translate("MainWindow", u"File Exclusion", None))
+        self.actionAbout.setText(
+            QCoreApplication.translate("MainWindow", u"About", None))
+        self.actionExtract.setText(
+            QCoreApplication.translate("MainWindow", u"Extract", None))
+# if QT_CONFIG(shortcut)
+        self.actionExtract.setShortcut(
+            QCoreApplication.translate("MainWindow", u"Ctrl+E", None))
 #endif // QT_CONFIG(shortcut)
-        self.actionOpenISO.setText(QCoreApplication.translate("MainWindow", u"Open ISO", None))
-#if QT_CONFIG(shortcut)
-        self.actionOpenISO.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+O", None))
+        self.actionOpenISO.setText(
+            QCoreApplication.translate("MainWindow", u"Open ISO", None))
+# if QT_CONFIG(shortcut)
+        self.actionOpenISO.setShortcut(
+            QCoreApplication.translate("MainWindow", u"Ctrl+O", None))
 #endif // QT_CONFIG(shortcut)
-        self.actionSave.setText(QCoreApplication.translate("MainWindow", u"Save", None))
-#if QT_CONFIG(shortcut)
-        self.actionSave.setShortcut(QCoreApplication.translate("MainWindow", u"Ctrl+S", None))
+        self.actionSave.setText(
+            QCoreApplication.translate("MainWindow", u"Save", None))
+# if QT_CONFIG(shortcut)
+        self.actionSave.setShortcut(
+            QCoreApplication.translate("MainWindow", u"Ctrl+S", None))
 #endif // QT_CONFIG(shortcut)
-        self.actionDarkTheme.setText(QCoreApplication.translate("MainWindow", u"Dark Theme", None))
-        self.actionCheckUpdates.setText(QCoreApplication.translate("MainWindow", u"Check Updates", None))
-        self.fileSystemGroupBox.setTitle(QCoreApplication.translate("MainWindow", u"File System", None))
-        self.fileSystemStartInfoLabel.setText(QCoreApplication.translate("MainWindow", u"File Location: ", None))
-        self.fileSystemSizeInfoLabel.setText(QCoreApplication.translate("MainWindow", u"File Size: ", None))
-        self.isoDetailsGroupBox.setTitle(QCoreApplication.translate("MainWindow", u"ISO Details", None))
-        self.isoMakerCodeLabel.setText(QCoreApplication.translate("MainWindow", u"Maker Code: ", None))
-        self.isoGameCodeLabel.setText(QCoreApplication.translate("MainWindow", u"Game Code: ", None))
-        self.isoNameLabel.setText(QCoreApplication.translate("MainWindow", u"Name: ", None))
-        self.isoDiskIDLabel.setText(QCoreApplication.translate("MainWindow", u"Disk ID:", None))
-        self.isoRegionLabel.setText(QCoreApplication.translate("MainWindow", u"Region:", None))
-        self.isoBuildDateLabel.setText(QCoreApplication.translate("MainWindow", u"Build Date: ", None))
-        self.isoVersionLabel.setText(QCoreApplication.translate("MainWindow", u"Version: ", None))
-        self.isoRegionComboBox.setItemText(0, QCoreApplication.translate("MainWindow", u"NTSC-U", None))
-        self.isoRegionComboBox.setItemText(1, QCoreApplication.translate("MainWindow", u"PAL", None))
-        self.isoRegionComboBox.setItemText(2, QCoreApplication.translate("MainWindow", u"NTSC-J", None))
-        self.isoRegionComboBox.setItemText(3, QCoreApplication.translate("MainWindow", u"NTSC-K", None))
+        self.actionDarkTheme.setText(
+            QCoreApplication.translate("MainWindow", u"Dark Theme", None))
+        self.actionCheckUpdates.setText(
+            QCoreApplication.translate("MainWindow", u"Check Updates", None))
+        self.fileSystemGroupBox.setTitle(
+            QCoreApplication.translate("MainWindow", u"File System", None))
+        self.fileSystemStartInfoLabel.setText(
+            QCoreApplication.translate("MainWindow", u"File Location: ", None))
+        self.fileSystemSizeInfoLabel.setText(
+            QCoreApplication.translate("MainWindow", u"File Size: ", None))
+        self.isoDetailsGroupBox.setTitle(
+            QCoreApplication.translate("MainWindow", u"ISO Details", None))
+        self.isoMakerCodeLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Maker Code: ", None))
+        self.isoGameCodeLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Game Code: ", None))
+        self.isoNameLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Name: ", None))
+        self.isoDiskIDLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Disk ID:", None))
+        self.isoRegionLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Region:", None))
+        self.isoBuildDateLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Build Date: ", None))
+        self.isoVersionLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Version: ", None))
+        self.isoRegionComboBox.setItemText(
+            0, QCoreApplication.translate("MainWindow", u"NTSC-U", None))
+        self.isoRegionComboBox.setItemText(
+            1, QCoreApplication.translate("MainWindow", u"PAL", None))
+        self.isoRegionComboBox.setItemText(
+            2, QCoreApplication.translate("MainWindow", u"NTSC-J", None))
+        self.isoRegionComboBox.setItemText(
+            3, QCoreApplication.translate("MainWindow", u"NTSC-K", None))
 
-        self.bannerGroupBox.setTitle(QCoreApplication.translate("MainWindow", u"Banner Details", None))
+        self.bannerGroupBox.setTitle(QCoreApplication.translate(
+            "MainWindow", u"Banner Details", None))
         self.bannerLongMakerTextBox.setPlainText("")
         self.bannerDescTextBox.setPlainText("")
-        self.bannerShortNameLabel.setText(QCoreApplication.translate("MainWindow", u"Short Name:", None))
-        self.bannerShortMakerLabel.setText(QCoreApplication.translate("MainWindow", u"Short Maker:", None))
-        self.bannerLongNameLabel.setText(QCoreApplication.translate("MainWindow", u"Long Name:", None))
-        self.bannerLongMakerLabel.setText(QCoreApplication.translate("MainWindow", u"Long Maker:", None))
-        self.bannerDescLabel.setText(QCoreApplication.translate("MainWindow", u"Description:", None))
-        self.bannerVersionLabel.setText(QCoreApplication.translate("MainWindow", u"Version: ", None))
-        self.bannerLanguageLabel.setText(QCoreApplication.translate("MainWindow", u"Language:", None))
-        self.bannerLanguageComboBox.setItemText(0, QCoreApplication.translate("MainWindow", u"English", None))
-        self.bannerLanguageComboBox.setItemText(1, QCoreApplication.translate("MainWindow", u"German", None))
-        self.bannerLanguageComboBox.setItemText(2, QCoreApplication.translate("MainWindow", u"French", None))
-        self.bannerLanguageComboBox.setItemText(3, QCoreApplication.translate("MainWindow", u"Spanish", None))
-        self.bannerLanguageComboBox.setItemText(4, QCoreApplication.translate("MainWindow", u"Italian", None))
-        self.bannerLanguageComboBox.setItemText(5, QCoreApplication.translate("MainWindow", u"Dutch", None))
+        self.bannerShortNameLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Short Name:", None))
+        self.bannerShortMakerLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Short Maker:", None))
+        self.bannerLongNameLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Long Name:", None))
+        self.bannerLongMakerLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Long Maker:", None))
+        self.bannerDescLabel.setText(QCoreApplication.translate(
+            "MainWindow", u"Description:", None))
+        self.bannerVersionLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Version: ", None))
+        self.bannerLanguageLabel.setText(
+            QCoreApplication.translate("MainWindow", u"Language:", None))
+        self.bannerLanguageComboBox.setItemText(
+            0, QCoreApplication.translate("MainWindow", u"English", None))
+        self.bannerLanguageComboBox.setItemText(
+            1, QCoreApplication.translate("MainWindow", u"German", None))
+        self.bannerLanguageComboBox.setItemText(
+            2, QCoreApplication.translate("MainWindow", u"French", None))
+        self.bannerLanguageComboBox.setItemText(
+            3, QCoreApplication.translate("MainWindow", u"Spanish", None))
+        self.bannerLanguageComboBox.setItemText(
+            4, QCoreApplication.translate("MainWindow", u"Italian", None))
+        self.bannerLanguageComboBox.setItemText(
+            5, QCoreApplication.translate("MainWindow", u"Dutch", None))
 
-        self.bannerImportButton.setText(QCoreApplication.translate("MainWindow", u"Import", None))
-        self.bannerExportButton.setText(QCoreApplication.translate("MainWindow", u"Export", None))
-        self.bannerSaveButton.setText(QCoreApplication.translate("MainWindow", u"Save Changes", None))
+        self.bannerImportButton.setText(
+            QCoreApplication.translate("MainWindow", u"Import", None))
+        self.bannerExportButton.setText(
+            QCoreApplication.translate("MainWindow", u"Export", None))
+        self.bannerSaveButton.setText(QCoreApplication.translate(
+            "MainWindow", u"Save Changes", None))
         self.bannerImageView.setText("")
-        self.operationProgressBar.setFormat(QCoreApplication.translate("MainWindow", u"Please wait... %p%", None))
-        self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
-        self.menuHelp.setTitle(QCoreApplication.translate("MainWindow", u"Help", None))
-        self.menuSettings.setTitle(QCoreApplication.translate("MainWindow", u"Settings", None))
+        self.operationProgressBar.setFormat(QCoreApplication.translate(
+            "MainWindow", u"Please wait... %p%", None))
+        self.menuFile.setTitle(
+            QCoreApplication.translate("MainWindow", u"File", None))
+        self.menuHelp.setTitle(
+            QCoreApplication.translate("MainWindow", u"Help", None))
+        self.menuSettings.setTitle(
+            QCoreApplication.translate("MainWindow", u"Settings", None))
     # retranslateUi

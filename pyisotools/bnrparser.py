@@ -9,7 +9,7 @@ from typing import Union
 
 from PIL import Image
 
-from pyisotools.iohelper import read_string
+from pyisotools.iohelper import detect_encoding, read_string
 
 
 def io_preserve(func):
@@ -197,7 +197,7 @@ class BNR(RGB5A3):
         self._rawdata.write(b"\x00" * 0x20)
         self._rawdata.seek(0x1820 + (self.index * 0x140))
         self._rawdata.write(
-            bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+            bytes(name[:0x1F], "shift-jis"))
 
     @property
     @io_preserve
@@ -211,7 +211,7 @@ class BNR(RGB5A3):
         self._rawdata.write(b"\x00" * 0x20)
         self._rawdata.seek(0x1840 + (self.index * 0x140))
         self._rawdata.write(
-            bytes(name[:0x1F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+            bytes(name[:0x1F], "shift-jis"))
 
     @property
     @io_preserve
@@ -225,7 +225,7 @@ class BNR(RGB5A3):
         self._rawdata.write(b"\x00" * 0x40)
         self._rawdata.seek(0x1860 + (self.index * 0x140))
         self._rawdata.write(
-            bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+            bytes(name[:0x3F], "shift-jis"))
 
     @property
     @io_preserve
@@ -239,7 +239,7 @@ class BNR(RGB5A3):
         self._rawdata.write(b"\x00" * 0x40)
         self._rawdata.seek(0x18A0 + (self.index * 0x140))
         self._rawdata.write(
-            bytes(name[:0x3F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+            bytes(name[:0x3F], "shift-jis"))
 
     @property
     @io_preserve
@@ -253,7 +253,7 @@ class BNR(RGB5A3):
         self._rawdata.write(b"\x00" * 0x80)
         self._rawdata.seek(0x18E0 + (self.index * 0x140))
         self._rawdata.write(
-            bytes(name[:0x7F], "iso-8859-1" if self.region != "NTSC-J" else "shift-jis"))
+            bytes(name[:0x7F], "shift-jis"))
 
     def get_image(self) -> Image.Image:
         _image = self.rawImage
@@ -350,7 +350,7 @@ class BNR(RGB5A3):
         return RGB5A3.decode_pixel(pixel)
 
     def __len__(self) -> int:
-        return len(self._rawdata)
+        return len(self._rawdata.getbuffer())
 
 
 if __name__ == "__main__":

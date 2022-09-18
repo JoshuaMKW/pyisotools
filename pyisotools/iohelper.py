@@ -111,5 +111,18 @@ def read_string(
         return ""
 
 
+def detect_encoding(string: bytes) -> str:
+    encoder = UniversalDetector()
+    encoder.feed(string)
+    encoding = encoder.close()["encoding"]
+
+    try:
+        if not encoding or encoding.lower() not in {"ascii", "utf-8", "shift-jis", "iso-8859-1"}:
+            encoding = "shift-jis"
+        return string.decode(encoding)
+    except UnicodeDecodeError:
+        return ""
+
+
 def align_int(num: int, alignment: int) -> int:
     return (num + (alignment - 1)) & -alignment
