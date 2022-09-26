@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import functools
 import pickle
 import subprocess
@@ -16,7 +17,7 @@ from typing import Callable, Dict, Iterable, Tuple, Union
 
 from PIL import Image, ImageQt
 from pyisotools.gui.mainwindow import Ui_MainWindow
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QThread
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtWidgets import (QDialog, QFileDialog, QFrame, QSizePolicy, QTextEdit, QLabel,
                                QMainWindow, QMenu, QMessageBox)
@@ -294,6 +295,42 @@ class Controller(QMainWindow):
 
         self.taskSize = 0
         self.taskName = ""
+
+    @property
+    def rootConfigPath(self) -> Path:
+        if not self.is_from_iso():
+            return self.systemPath / ".config.json"
+        return None
+
+    @property
+    def systemPath(self) -> Path:
+        if not self.is_from_iso():
+            if self.is_gcr_root():
+                return self.rootPath / "&&systemdata"
+            return self.rootPath / "sys"
+        return None
+
+    @property
+    def dataPath(self) -> Path:
+        if not self.is_from_iso():
+            if self.is_gcr_root():
+                return self.rootPath
+            return self.rootPath / "files"
+        return None
+
+    def is_dolphin_root(self) -> bool:
+        if not self.is_from_iso():
+            folders = {x.name.lower()
+                       for x in self.rootPath.iterdir() if x.is_dir()}
+            return "sys" in folders and "files" in folders and "&&systemdata" not in folders
+        return False
+
+    def is_gcr_root(self) -> bool:
+        if self.root:
+            folders = {x.name.lower()
+                       for x in self.rootPath.iterdir() if x.is_dir()}
+            return "&&systemdata" in folders
+        return False
 
     def closeEvent(self, event):
         self.update_program_config()

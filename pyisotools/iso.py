@@ -343,7 +343,6 @@ class GamecubeISO(ISOBase):
         return False
 
     def build(self, dest: Union[Path, str] = None, preCalc: bool = True):
-
         if dest is not None:
             fmtpath = str(dest).replace(
                 r"%fullname%", f"{self.bootheader.gameName} [{self.bootheader.gameCode}{self.bootheader.makerCode}]")
@@ -372,6 +371,8 @@ class GamecubeISO(ISOBase):
         _strOfs = 0
         _strTableOfs = self.strTableOfs
         for child in self.rchildren(includedOnly=True):
+            self.onVirtualTaskStart(child.path, len(child.name) + 13)
+
             child._id = _curEntry
             self._rawFST.write(b"\x01" if child.is_dir() else b"\x00")
             self._rawFST.write((_strOfs).to_bytes(3, "big", signed=False))
@@ -386,6 +387,8 @@ class GamecubeISO(ISOBase):
             self._rawFST.write(child.name.encode() + b"\x00")
             _strOfs += len(child.name) + 1
             self._rawFST.seek(_oldpos)
+
+            self.onVirtualTaskComplete()
 
         self.bootheader.fstSize = len(self._rawFST.getbuffer())
         self.bootheader.fstMaxSize = self.bootheader.fstSize
@@ -901,60 +904,21 @@ class GamecubeISO(ISOBase):
 
         self._init_tables(data)
 
-        if "name" in data:  # convert legacy to new
-            self.bootheader.gameName = data["name"]
-            self.bootheader.gameCode = data["gameid"][:4]
-            self.bootheader.makerCode = data["gameid"][4:6]
-            self.bootheader.version = data["version"]
+        config = {
+            "alignment": self._alignmentTable,
+            "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
+            "exclude": list(self._excludeTable)
+        }
 
-            if self.bnr:
-                self.bnr.gameName = data["name"]
-                self.bnr.gameTitle = data["name"]
-                self.bnr.developerName = data["author"]
-                self.bnr.developerTitle = data["author"]
-                self.bnr.gameDescription = data["description"]
-
-            config = {"gamename": self.bootheader.gameName,
-                      "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
-                      "diskid": self.bootheader.diskID,
-                      "version": self.bootheader.version,
-                      "shortname": self.bnr.gameName if self.bnr else "",
-                      "longname": self.bnr.gameTitle if self.bnr else "",
-                      "devname": self.bnr.developerName if self.bnr else "",
-                      "devtitle": self.bnr.developerTitle if self.bnr else "",
-                      "description": self.bnr.gameDescription if self.bnr else "",
-                      "alignment": self._alignmentTable,
-                      "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
-                      "exclude": list(self._excludeTable)}
-            with path.open("w") as f:
-                json.dump(config, f, indent=4)
-        else:
-            self.bootheader.gameName = data["gamename"]
-            self.bootheader.gameCode = data["gameid"][:4]
-            self.bootheader.makerCode = data["gameid"][4:6]
-            self.bootheader.diskID = data["diskid"]
-            self.bootheader.version = data["version"]
-
-            if self.bnr:
-                self.bnr.gameName = data["shortname"]
-                self.bnr.gameTitle = data["longname"]
-                self.bnr.developerName = data["devname"]
-                self.bnr.developerTitle = data["devtitle"]
-                self.bnr.gameDescription = data["description"]
+        with path.open("w") as f:
+            json.dump(config, f, indent=4)
 
     def save_config(self):
-        config = {"gamename": self.bootheader.gameName,
-                  "gameid": self.bootheader.gameCode + self.bootheader.makerCode,
-                  "diskid": self.bootheader.diskID,
-                  "version": self.bootheader.version,
-                  "shortname": self.bnr.gameName,
-                  "longname": self.bnr.gameTitle,
-                  "devname": self.bnr.developerName if self.bnr else "",
-                  "devtitle": self.bnr.developerTitle if self.bnr else "",
-                  "description": self.bnr.gameDescription if self.bnr else "",
-                  "alignment": self._alignmentTable,
-                  "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
-                  "exclude": list(self._excludeTable)}
+        config = {
+            "alignment": self._alignmentTable,
+            "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
+            "exclude": list(self._excludeTable)
+        }
 
         with self.configPath.open("w") as f:
             json.dump(config, f, indent=4)

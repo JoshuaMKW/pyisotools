@@ -278,20 +278,8 @@ class BNR(RGB5A3):
         dest.write_bytes(self._rawdata.getvalue())
 
     def save_png(self, dest: Path):
-        img = self.get_image()
         img.save(str(dest))
-
-        f = dest.parent / (dest.stem + ".json")
-        info = {}
-
-        info["gamename"] = self.gameName
-        info["gametitle"] = self.gameTitle
-        info["developername"] = self.developerName
-        info["developertitle"] = self.developerTitle
-        info["description"] = self.gameDescription
-
-        with f.open("w") as jsonFile:
-            json.dump(info, jsonFile, indent=4)
+        img = self.get_image()
 
     def load(
         self,
@@ -304,38 +292,19 @@ class BNR(RGB5A3):
         desc: str = "",
         overwrite=False
     ):
-        self.regionID = region
         if f.suffix == ".bnr":
             self._rawdata = BytesIO(f.read_bytes())
-            if overwrite:
-                self.magic = region
-                self.gameName = gameName
-                self.gameTitle = gameTitle
-                self.developerName = developerName
-                self.developerTitle = developerTitle
-                self.gameDescription = desc
         elif f.suffix in (".png", ".jpeg"):
-            j = f.parent / (f.stem + ".json")
-
-            if j.exists() and not overwrite:
-                with j.open("r") as jsonFile:
-                    info = json.load(jsonFile)
-
-                self.gameName = info["gamename"]
-                self.gameTitle = info["gametitle"]
-                self.developerName = info["developername"]
-                self.developerTitle = info["developertitle"]
-                self.gameDescription = info["description"]
-            else:
-                self.gameName = gameName
-                self.gameTitle = gameTitle
-                self.developerName = developerName
-                self.developerTitle = developerTitle
-                self.gameDescription = desc
-
-            self.magic = region
-
             self.rawImage = Image.open(f)
+
+        self.regionID = region
+        if overwrite:
+            self.magic = region
+            self.gameName = gameName
+            self.gameTitle = gameTitle
+            self.developerName = developerName
+            self.developerTitle = developerTitle
+            self.gameDescription = desc
 
     @staticmethod
     def _encode_pixel(pixel: tuple):

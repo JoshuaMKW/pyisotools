@@ -16,6 +16,13 @@ def main(argv: Optional[Tuple] = None):
     if argv is None:
         argv = sys.argv[1:]
 
+    # Force Windows Taskbar Icon
+    if sys.platform in {"win32", "cygwin", "msys"}:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            Controller.get_window_title()
+        )
+
     if len(argv) == 0:
         app = QApplication()
         central = Ui_MainWindow()
