@@ -278,8 +278,8 @@ class BNR(RGB5A3):
         dest.write_bytes(self._rawdata.getvalue())
 
     def save_png(self, dest: Path):
-        img.save(str(dest))
         img = self.get_image()
+        img.save(str(dest))
 
     def load(
         self,

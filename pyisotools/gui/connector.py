@@ -649,7 +649,7 @@ class Controller(QMainWindow):
         curBnrName = Path(bnrComboBox.currentText())
         if not curBnrName in self.bnrMap:
             curBnrName = list(self.bnrMap.keys())[0]
-            bnrComboBox.setCurrentText(str(curBnrName))
+            bnrComboBox.setCurrentText(curBnrName.as_posix())
 
         bnr = self.bnrMap[curBnrName]
 

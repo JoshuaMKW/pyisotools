@@ -200,20 +200,13 @@ class FSTNode():
         return size
 
     def find_by_path(self, path: Union[Path, str], skipExcluded: bool = True) -> FSTNode:
-        _path = str(path).lower()
+        _path = path.as_posix().lower()
         doGlob = "?" in _path or "*" in _path
 
         if _path in {"", "."}:
             return self.rootnode
 
-        for node in self.rfiles(includedOnly=skipExcluded):
-            if doGlob:
-                if fnmatch(node.path, _path):
-                    return node
-            else:
-                if node.path.lower() == _path:
-                    return node
-        for node in self.rdirs(includedOnly=skipExcluded):
+        for node in self.rchildren(skipExcluded):
             if doGlob:
                 if fnmatch(node.path, _path):
                     return node
