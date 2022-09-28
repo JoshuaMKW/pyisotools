@@ -1193,7 +1193,7 @@ class Controller(QMainWindow):
 
                 if node.name == "opening.bnr":
                     self.iso.bnr = BNR(self.iso.dataPath /
-                                       item.node.fullPath, region=region)
+                                       item.node.path, region=region)
 
                 self.bnr_reset_info()
                 self.bnr_update_info()
@@ -1269,7 +1269,7 @@ def _recursive_enable(parent):
 
 
 def _extract_path_from_iso(controller: Controller, dest: Path, node: FSTNode):
-    controller.iso.extract_path(node.fullPath, dest)
+    controller.iso.extract_path(node.path, dest)
 
 
 def _round_up_to_power_of_2(n):
