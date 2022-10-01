@@ -96,7 +96,7 @@ class NodeFieldPositionDialog(QDialog):
             return
 
         address = int(self.lineEdit.text(), 16)
-        if self._minimum <= address < self._maximum:
+        if self._minimum <= address <= self._maximum:
             self.accept()
             return
 
@@ -104,7 +104,7 @@ class NodeFieldPositionDialog(QDialog):
         error.setIcon(QMessageBox.Critical)
         error.setText("Reposition failed!")
         error.setInformativeText(
-            f"Positional address provided is out of range! (0x{self._minimum:X} <= 0x{address:X} < 0x{self._maximum:X} is false!)")
+            f"Positional address provided is out of range! (0x{self._minimum:X} <= 0x{address:X} <= 0x{self._maximum:X} is false!)")
         error.setWindowTitle("Error")
         error.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         error.exec()
