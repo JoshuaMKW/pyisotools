@@ -181,7 +181,7 @@ class ISOBase(_ISOInfo):
 
         return node
 
-    def _init_tables(self, config: Optional[Path] = None):
+    def _init_tables(self, config: Optional[dict] = None):
         if not config:
             self._alignmentTable = SortedDict()
             self._locationTable = SortedDict()
@@ -243,7 +243,7 @@ class ISOBase(_ISOInfo):
 
         for entry, width in self._alignmentTable.items():
             if fnmatch(_path, entry.strip()):
-                alignment = width
+                alignment = max(min(width, 32768), 4)
                 break
 
         return alignment
@@ -656,7 +656,7 @@ class GamecubeISO(ISOBase):
             if bnrNode:
                 self.onVirtualTaskStart("opening.bnr", len(self.bnr))
                 f.seek(bnrNode._fileoffset)
-                f.write(self.bnr._rawdata.getvalue())
+                f.write(self.bnr.rawdata.getvalue())
                 self.onVirtualTaskComplete()
 
         self.onVirtualJobEnd()
@@ -904,15 +904,6 @@ class GamecubeISO(ISOBase):
 
         self._init_tables(data)
 
-        config = {
-            "alignment": self._alignmentTable,
-            "location": {k: self._locationTable[k] for k in sorted(self._locationTable, key=str.upper)},
-            "exclude": list(self._excludeTable)
-        }
-
-        with path.open("w") as f:
-            json.dump(config, f, indent=4)
-
     def save_config(self):
         config = {
             "alignment": self._alignmentTable,
@@ -952,13 +943,18 @@ class GamecubeISO(ISOBase):
                 raise InvalidEntryError("Not a dir or file")
 
     def _save_config_regen(self):
-        self._alignmentTable.clear()
         self._locationTable.clear()
         self._excludeTable.clear()
 
         for node in self.rchildren():
+            defaultAlignment = 4
+            for match in self._alignmentTable:
+                if fnmatch(node.path, match):
+                    defaultAlignment = self._alignmentTable[match]
+                    break
+
             if node.is_file():
-                if node._alignment != 4:
+                if node._alignment != defaultAlignment:
                     self._alignmentTable[node.path] = node._alignment
                 if node._position:
                     self._locationTable[node.path] = node._position

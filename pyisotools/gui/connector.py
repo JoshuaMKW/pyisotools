@@ -28,7 +28,7 @@ from ..bnrparser import BNR
 from ..iso import FSTNode, GamecubeISO, WiiISO
 from .customwidgets import FSTTreeItem
 from .flagthread import FlagThread
-from .nodewindow import Ui_NodeFieldWindow
+from .nodewindow import NodeFieldAlignmentDialog, NodeFieldPositionDialog
 from .updater import GitUpdateScraper
 from .updatewindow import Ui_UpdateDialog
 from .workpathing import get_program_folder, resource_path
@@ -326,11 +326,40 @@ class Controller(QMainWindow):
         return False
 
     def is_gcr_root(self) -> bool:
-        if self.root:
+        if not self.is_from_iso():
             folders = {x.name.lower()
                        for x in self.rootPath.iterdir() if x.is_dir()}
             return "&&systemdata" in folders
         return False
+
+    def get_minimum_free_address(self) -> int:
+        baseSize = 0x2440  # Account for boot.bin + bi2.bin
+        if not self.is_from_iso():
+            systemPath = self.systemPath
+
+            if self.is_gcr_root():
+                appPath = systemPath / "Apploader.ldr"
+                dolPath = systemPath / "Start.dol"
+                fstPath = systemPath / "Game.toc"
+            else:
+                appPath = systemPath / "apploader.img"
+                dolPath = systemPath / "main.dol"
+                fstPath = systemPath / "fst.bin"
+
+            baseSize += appPath.stat().st_size
+            baseSize = (baseSize + 0x1FFF) & -0x2000
+            baseSize += dolPath.stat().st_size
+            baseSize = (baseSize + 3) & -4
+            baseSize += fstPath.stat().st_size
+            baseSize = (baseSize + 3) & -4
+        else:
+            baseSize += self.iso.apploader.loaderSize + self.iso.apploader.trailerSize
+            baseSize = (baseSize + 0x1FFF) & -0x2000
+            baseSize += self.iso.dol.size
+            baseSize = (baseSize + 3) & -4
+            baseSize += len(self.iso._rawFST.getvalue())
+            baseSize = (baseSize + 3) & -4
+        return baseSize
 
     def closeEvent(self, event):
         self.update_program_config()
@@ -723,13 +752,13 @@ class Controller(QMainWindow):
 
             with self.iso.isoPath.open("r+b") as f:
                 f.seek(bnrNode._fileoffset, 0)
-                f.write(bnr._rawdata.getvalue())
+                f.write(bnr.rawdata.getvalue())
         else:
             bnrPath = self.rootPath / "files" / self.ui.bannerComboBox.currentText()
             if not bnrPath.is_file():
                 raise RuntimeError("Not a file for BNR save")
 
-            bnrPath.write_bytes(bnr._rawdata.getvalue())
+            bnrPath.write_bytes(bnr.rawdata.getvalue())
 
     def help_about(self):
         desc = "".join(["pyisotools is a tool for extracting and building Gamecube ISOs.\n",
@@ -1077,39 +1106,29 @@ class Controller(QMainWindow):
 
     @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
     def _open_alignment_dialog(self, item: FSTTreeItem):
-        window = Ui_NodeFieldWindow()
-        dialog = QDialog(self, Qt.WindowSystemMenuHint |
-                         Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
-
-        window.setupUi(dialog)
+        dialog = NodeFieldAlignmentDialog(
+            self,
+            Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
+        )
 
         dialog.setWindowTitle(item.text(0))
         dialog.setModal(True)
 
-        window.label.setText("Alignment:")
         if item.node._alignment:
-            window.plainTextEdit.setPlainText(str(item.node._alignment))
+            dialog.alignmentComboBox.setCurrentIndex(
+                dialog.alignmentComboBox.findText(str(item.node._alignment)))
+            # dialog.lineEdit.setText(str(item.node._alignment))
+            # dialog.plainTextEdit.setPlainText(str(item.node._alignment))
         else:
-            window.plainTextEdit.setPlainText("4")
+            dialog.alignmentComboBox.setCurrentIndex(0)
 
         dialog.show()
         if dialog.exec_() != QFileDialog.Accepted:
             return False, ""
 
-        text = window.plainTextEdit.toPlainText()
+        text = dialog.alignmentComboBox.currentText()
+        alignment = int(text, 0)
 
-        try:
-            if text.startswith("0x"):
-                alignment = int(text, 16)
-            else:
-                alignment = int(text)
-        except ValueError:
-            dialog = JobFailedDialog(self)
-            dialog.setText(
-                f"Invalid input \"{text}\" could not be converted to int")
-            return False, dialog
-
-        alignment = _round_up_to_power_of_2(max(4, min(alignment, 32768)))
         if item.node.is_file() and item.node._alignment != alignment:
             item.node._alignment = alignment
             self.iso.pre_calc_metadata(
@@ -1126,37 +1145,27 @@ class Controller(QMainWindow):
 
     @notify_status(None, JobDialogState.SHOW_FAILURE_WHEN_MESSAGE)
     def _open_position_dialog(self, item: FSTTreeItem):
-        window = Ui_NodeFieldWindow()
-        dialog = QDialog(self, Qt.WindowSystemMenuHint |
-                         Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
-
-        window.setupUi(dialog)
+        dialog = NodeFieldPositionDialog(
+            self.get_minimum_free_address(),
+            GamecubeISO.MaxSize - ((item.node.datasize + 3) & -4),
+            self, Qt.WindowSystemMenuHint |
+            Qt.WindowTitleHint | Qt.WindowCloseButtonHint
+        )
 
         dialog.setWindowTitle(item.text(0))
         dialog.setModal(True)
 
-        window.label.setText("Position:")
         if item.node._position:
-            window.plainTextEdit.setPlainText(f"0x{item.node._position:X}")
+            dialog.lineEdit.setText(f"{item.node._position:X}")
         else:
-            window.plainTextEdit.setPlainText("-1")
+            dialog.lineEdit.setText("")
 
         dialog.show()
         if dialog.exec_() != QFileDialog.Accepted:
             return False, ""
 
-        text = window.plainTextEdit.toPlainText()
-
-        try:
-            if text.startswith("0x"):
-                position = int(text, 16)
-            else:
-                position = int(text)
-        except ValueError:
-            dialog = JobFailedDialog(self)
-            dialog.setText(
-                f"Invalid input \"{text}\" could not be converted to int")
-            return False, dialog
+        text = dialog.lineEdit.text()
+        position = -1 if text.strip() == "" else int(text, 16)
 
         if position < 0:
             if item.node._position:

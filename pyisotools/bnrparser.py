@@ -15,9 +15,9 @@ from pyisotools.iohelper import detect_encoding, read_string
 def io_preserve(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        _loc = self._rawdata.tell()
+        _loc = self.rawdata.tell()
         value = func(self, *args, **kwargs)
-        self._rawdata.seek(_loc)
+        self.rawdata.seek(_loc)
         return value
     return wrapper
 
@@ -106,7 +106,7 @@ class BNR(RGB5A3):
         desc: str = "",
         overwrite=False
     ):
-        self._rawdata = BytesIO(
+        self.rawdata = BytesIO(
             b"\x00" * (0x1960 if region != BNR.Regions.EUROPE else 0x1FA0))
         self.regionID = region
         self.index = 0
@@ -117,14 +117,14 @@ class BNR(RGB5A3):
     @classmethod
     def from_data(cls, obj, region: Regions = Regions.AMERICA, size: int = -1):
         self = cls.__new__(cls)
-        self._rawdata = BytesIO(obj.read(size))
+        self.rawdata = BytesIO(obj.read(size))
         self.regionID = region
         self.index = 0
         return self
 
     @property
     def isBNR2(self) -> bool:
-        return self.magic == "BNR2" and len(self._rawdata.getbuffer()) == 0x1FA0
+        return self.magic == "BNR2" and len(self.rawdata.getbuffer()) == 0x1FA0
 
     @property
     def region(self) -> str:
@@ -139,8 +139,8 @@ class BNR(RGB5A3):
     @property
     @io_preserve
     def magic(self) -> str:
-        self._rawdata.seek(0)
-        _magic = self._rawdata.read(4).decode("iso-8859-1")
+        self.rawdata.seek(0)
+        _magic = self.rawdata.read(4).decode("iso-8859-1")
         if _magic not in {"BNR1", "BNR2"}:
             raise ValueError("BNR magic is invalid")
         return _magic
@@ -148,28 +148,28 @@ class BNR(RGB5A3):
     @magic.setter
     @io_preserve
     def magic(self, region: Regions):
-        self._rawdata.seek(0)
+        self.rawdata.seek(0)
 
-        if region == BNR.Regions.EUROPE and len(self._rawdata.getbuffer()) == 0x1FA0:
-            self._rawdata.write(b"BNR2")
+        if region == BNR.Regions.EUROPE and len(self.rawdata.getbuffer()) == 0x1FA0:
+            self.rawdata.write(b"BNR2")
         else:
-            self._rawdata.write(b"BNR1")
+            self.rawdata.write(b"BNR1")
 
     @property
     @io_preserve
     def rawImage(self) -> BytesIO:
-        self._rawdata.seek(0x20)
-        return BytesIO(self._rawdata.read(0x1800))
+        self.rawdata.seek(0x20)
+        return BytesIO(self.rawdata.read(0x1800))
 
     @rawImage.setter
     @io_preserve
     def rawImage(self, _img: Union[bytes, BytesIO, Image.Image]):
-        self._rawdata.seek(0x20)
+        self.rawdata.seek(0x20)
         if isinstance(_img, bytes):
-            self._rawdata.write(_img[:0x1800])
+            self.rawdata.write(_img[:0x1800])
             return
         if isinstance(_img, BytesIO):
-            self._rawdata.write(_img.getvalue()[:0x1800])
+            self.rawdata.write(_img.getvalue()[:0x1800])
             return
 
         smallImg = _img.resize((BNR.ImageWidth, BNR.ImageHeight))
@@ -182,77 +182,77 @@ class BNR(RGB5A3):
 
                         pixel = smallImg.getpixel((column, row))
                         if column < BNR.ImageWidth and row < BNR.ImageHeight:
-                            self._rawdata.write(self._encode_pixel(
+                            self.rawdata.write(self._encode_pixel(
                                 pixel).to_bytes(2, "big", signed=False))
 
     @property
     @io_preserve
     def gameName(self) -> str:
-        return read_string(self._rawdata, 0x1820 + (self.index * 0x140), 0x20)
+        return read_string(self.rawdata, 0x1820 + (self.index * 0x140), 0x20)
 
     @gameName.setter
     @io_preserve
     def gameName(self, name: str):
-        self._rawdata.seek(0x1820 + (self.index * 0x140))
-        self._rawdata.write(b"\x00" * 0x20)
-        self._rawdata.seek(0x1820 + (self.index * 0x140))
-        self._rawdata.write(
+        self.rawdata.seek(0x1820 + (self.index * 0x140))
+        self.rawdata.write(b"\x00" * 0x20)
+        self.rawdata.seek(0x1820 + (self.index * 0x140))
+        self.rawdata.write(
             bytes(name[:0x1F], "shift-jis"))
 
     @property
     @io_preserve
     def developerName(self) -> str:
-        return read_string(self._rawdata, 0x1840 + (self.index * 0x140), 0x20)
+        return read_string(self.rawdata, 0x1840 + (self.index * 0x140), 0x20)
 
     @developerName.setter
     @io_preserve
     def developerName(self, name: str):
-        self._rawdata.seek(0x1840 + (self.index * 0x140))
-        self._rawdata.write(b"\x00" * 0x20)
-        self._rawdata.seek(0x1840 + (self.index * 0x140))
-        self._rawdata.write(
+        self.rawdata.seek(0x1840 + (self.index * 0x140))
+        self.rawdata.write(b"\x00" * 0x20)
+        self.rawdata.seek(0x1840 + (self.index * 0x140))
+        self.rawdata.write(
             bytes(name[:0x1F], "shift-jis"))
 
     @property
     @io_preserve
     def gameTitle(self) -> str:
-        return read_string(self._rawdata, 0x1860 + (self.index * 0x140), 0x40)
+        return read_string(self.rawdata, 0x1860 + (self.index * 0x140), 0x40)
 
     @gameTitle.setter
     @io_preserve
     def gameTitle(self, name: str):
-        self._rawdata.seek(0x1860 + (self.index * 0x140))
-        self._rawdata.write(b"\x00" * 0x40)
-        self._rawdata.seek(0x1860 + (self.index * 0x140))
-        self._rawdata.write(
+        self.rawdata.seek(0x1860 + (self.index * 0x140))
+        self.rawdata.write(b"\x00" * 0x40)
+        self.rawdata.seek(0x1860 + (self.index * 0x140))
+        self.rawdata.write(
             bytes(name[:0x3F], "shift-jis"))
 
     @property
     @io_preserve
     def developerTitle(self) -> str:
-        return read_string(self._rawdata, 0x18A0 + (self.index * 0x140), 0x40)
+        return read_string(self.rawdata, 0x18A0 + (self.index * 0x140), 0x40)
 
     @developerTitle.setter
     @io_preserve
     def developerTitle(self, name: str):
-        self._rawdata.seek(0x18A0 + (self.index * 0x140))
-        self._rawdata.write(b"\x00" * 0x40)
-        self._rawdata.seek(0x18A0 + (self.index * 0x140))
-        self._rawdata.write(
+        self.rawdata.seek(0x18A0 + (self.index * 0x140))
+        self.rawdata.write(b"\x00" * 0x40)
+        self.rawdata.seek(0x18A0 + (self.index * 0x140))
+        self.rawdata.write(
             bytes(name[:0x3F], "shift-jis"))
 
     @property
     @io_preserve
     def gameDescription(self) -> str:
-        return read_string(self._rawdata, 0x18E0 + (self.index * 0x140), 0x80)
+        return read_string(self.rawdata, 0x18E0 + (self.index * 0x140), 0x80)
 
     @gameDescription.setter
     @io_preserve
     def gameDescription(self, name: str):
-        self._rawdata.seek(0x18E0 + (self.index * 0x140))
-        self._rawdata.write(b"\x00" * 0x80)
-        self._rawdata.seek(0x18E0 + (self.index * 0x140))
-        self._rawdata.write(
+        self.rawdata.seek(0x18E0 + (self.index * 0x140))
+        self.rawdata.write(b"\x00" * 0x80)
+        self.rawdata.seek(0x18E0 + (self.index * 0x140))
+        self.rawdata.write(
             bytes(name[:0x7F], "shift-jis"))
 
     def get_image(self) -> Image.Image:
@@ -275,7 +275,7 @@ class BNR(RGB5A3):
         return img
 
     def save_bnr(self, dest: Path):
-        dest.write_bytes(self._rawdata.getvalue())
+        dest.write_bytes(self.rawdata.getvalue())
 
     def save_png(self, dest: Path):
         img = self.get_image()
@@ -293,7 +293,7 @@ class BNR(RGB5A3):
         overwrite=False
     ):
         if f.suffix == ".bnr":
-            self._rawdata = BytesIO(f.read_bytes())
+            self.rawdata = BytesIO(f.read_bytes())
         elif f.suffix in (".png", ".jpeg"):
             self.rawImage = Image.open(f)
 
@@ -319,7 +319,7 @@ class BNR(RGB5A3):
         return RGB5A3.decode_pixel(pixel)
 
     def __len__(self) -> int:
-        return len(self._rawdata.getbuffer())
+        return len(self.rawdata.getbuffer())
 
 
 if __name__ == "__main__":

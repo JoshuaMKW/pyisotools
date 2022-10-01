@@ -2,15 +2,32 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import (QKeyEvent, QKeySequence, QRegularExpressionValidator,
+from PySide6.QtCore import Qt, QRegularExpression, Signal
+from PySide6.QtGui import (QKeyEvent, QKeySequence, QIntValidator,
                            QTextOption)
-from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem
+from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem, QLineEdit
 
-from ..fst import FSTNode
+from pyisotools.fst import FSTNode
 
 # pylint: disable=invalid-name
 # pylint: disable=no-member
+
+
+class DialogLineEdit(QLineEdit):
+    accepted = Signal()
+
+    def keyPressEvent(self, e: QKeyEvent) -> None:
+        if (e.key() == Qt.Key_Return or e.key() == Qt.Key_Enter):
+            e.ignore()
+            self.accepted.emit()
+            return
+
+        text = self.text()
+        if (text == "" or text.startswith("0")) and e.key() == Qt.Key_0:
+            e.ignore()
+            return
+
+        super().keyPressEvent(e)
 
 
 class FilteredPlainTextEdit(QPlainTextEdit):
@@ -45,8 +62,8 @@ class FilteredPlainTextEdit(QPlainTextEdit):
     def setMaxLength(self, length: int):
         self._maxlength = length
 
-    def setValidator(self, validator: QRegularExpressionValidator):
-        self._validator = validator
+    # def setValidator(self, validator: QIntValidator):
+    #     self._validator = validator
 
     def keyPressEvent(self, e: QKeyEvent):
         textCursor = self.textCursor()
@@ -54,16 +71,15 @@ class FilteredPlainTextEdit(QPlainTextEdit):
         if (e.key() == Qt.Key_Return or e.key() == Qt.Key_Enter) and self._exitOnReturn:
             self.parent().accept()
         elif len(self.toPlainText()) - (textCursor.selectionEnd() - textCursor.selectionStart()) < self._maxlength:
-            if not self._validator or self._validator.regExp().exactMatch(e.text()):
-                super().keyPressEvent(e)
-            elif not e.text().isprintable():
-                if e.matches(QKeySequence.Paste):
-                    self.paste(QApplication.clipboard().text())
-                    e.ignore()
-                else:
-                    super().keyPressEvent(e)
-            else:
-                e.ignore()
+            super().keyPressEvent(e)
+            # if not e.text().isprintable():
+            #     if e.matches(QKeySequence.Paste):
+            #         self.paste(QApplication.clipboard().text())
+            #         e.ignore()
+            #     else:
+            #         super().keyPressEvent(e)
+            # else:
+            #     super().keyPressEvent(e)
 
         elif not e.text().isprintable() and not e.matches(QKeySequence.Paste):
             super().keyPressEvent(e)
@@ -94,9 +110,6 @@ class FilteredPlainTextEdit(QPlainTextEdit):
         menu.exec_(self.mapToGlobal(point))
 
     def paste(self, text: str):
-        if self._validator and not self._validator.regExp().exactMatch(text):
-            return
-
         currentText = self.toPlainText()
         textCursor = self.textCursor()
 
@@ -119,35 +132,35 @@ class FSTTreeItem(QTreeWidgetItem):
         super().__init__(*args, **kwargs)
         self._fstNode = None
 
-    @property
+    @ property
     def node(self) -> FSTNode:
         return self._fstNode
 
-    @node.setter
+    @ node.setter
     def node(self, node: FSTNode):
         self._fstNode = node
 
-    @property
+    @ property
     def alignment(self) -> int:
         return self.node._alignment
 
-    @alignment.setter
+    @ alignment.setter
     def alignment(self, align: int):
         self.node._alignment = align
 
-    @property
+    @ property
     def position(self) -> int:
         return self.node._fileoffset
 
-    @position.setter
+    @ position.setter
     def position(self, pos: int):
         self.node._fileoffset = pos
 
-    @property
+    @ property
     def excluded(self) -> int:
         return self.node._exclude
 
-    @excluded.setter
+    @ excluded.setter
     def excluded(self, exclude: bool):
         self.node._exclude = exclude
 
