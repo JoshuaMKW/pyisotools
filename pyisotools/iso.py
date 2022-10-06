@@ -670,7 +670,7 @@ class GamecubeISO(ISOBase):
 
             _size = align_int(_size, child._alignment) + child.size
 
-        return _size
+        return align_int(_size, 0x8000)
 
     def init_from_iso(self, iso: Path):
         self.isoPath = iso
