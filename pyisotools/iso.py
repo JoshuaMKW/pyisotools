@@ -49,11 +49,13 @@ class ISOBase(_ISOInfo):
         self._onPhysicalJobStart: Callable[[int], None] = None
         self._onPhysicalTaskComplete: Callable[[int], None] = None
         self._onPhysicalJobEnd: Callable[[int], None] = None
+        self._onPhysicalTaskStart: Callable[[int], None] = None
 
         # ISO build callbacks
         self._onVirtualJobStart: Callable[[int], None] = None
         self._onVirtualTaskComplete: Callable[[int], None] = None
         self._onVirtualJobEnd: Callable[[int], None] = None
+        self._onVirtualTaskStart: Callable[[int], None] = None
 
         self.isoPath = None
         self.bootheader = None
