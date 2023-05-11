@@ -6,3 +6,4 @@ sortedcontainers
 pillow
 pygithub
 PySide6
+pyinstaller

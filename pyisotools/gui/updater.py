@@ -16,7 +16,7 @@ except ImportError:
     from pyisotools.gui.flagthread import FlagThread
 
 
-class ReleaseManager():
+class ReleaseManager:
     def __init__(self, owner: str, repository: StreamHandler):
         self._owner = owner
         self._repo = repository
@@ -58,7 +58,7 @@ class ReleaseManager():
             yield v
 
     def compile_changelog_from(self, version: str) -> str:
-        """ Returns a Markdown changelog from the info of future versions """
+        """Returns a Markdown changelog from the info of future versions"""
         seperator = "\n\n---\n\n"
 
         newReleases: List[GitRelease] = list()
@@ -70,8 +70,12 @@ class ReleaseManager():
 
         markdown = ""
         for release in newReleases:
-            markdown += release.body.replace("Changelog",
-                                             f"Changelog ({release.tag_name})").strip() + seperator
+            markdown += (
+                release.body.replace(
+                    "Changelog", f"Changelog ({release.tag_name})"
+                ).strip()
+                + seperator
+            )
 
         return markdown.rstrip(seperator).strip()
 
@@ -81,22 +85,26 @@ class ReleaseManager():
         self._releases = repo.get_releases()
         return True
 
-    def view(self, release: GitRelease, browser: Optional[webbrowser.GenericBrowser] = None, asWindow: bool = False):
+    def view(
+        self,
+        release: GitRelease,
+        browser: Optional[webbrowser.GenericBrowser] = None,
+        asWindow: bool = False,
+    ):
         if browser is None:
             webbrowser.open(release.html_url, int(asWindow))
         else:
             browser.open(release.html_url, int(asWindow))
 
 
-class GitUpdateScraper(FlagThread, ReleaseManager):
-
+class GitUpdateScraper(FlagThread):
     updateFound = Signal()
 
     def __init__(self, owner: str, repository: str, parent=None):
-        FlagThread.__init__(self, parent)
-        ReleaseManager.__init__(self, owner, repository)
+        super().__init__(self, parent=parent)
         self.setObjectName(f"{self.__class__.__name__}.{owner}.{repository}")
 
+        self.manager = ReleaseManager(owner, repository)
         self.waitTime = 0.0
 
     def set_wait_time(self, seconds: float):
@@ -104,8 +112,10 @@ class GitUpdateScraper(FlagThread, ReleaseManager):
 
     def run(self):
         while not self.isQuitting():
-            successful = self.populate()
-            if successful and LooseVersion(self.get_newest_release().tag_name.lstrip("v")) > LooseVersion(__version__.lstrip("v")):
+            successful = self.manager.populate()
+            if successful and LooseVersion(
+                self.manager.get_newest_release().tag_name.lstrip("v")
+            ) > LooseVersion(__version__.lstrip("v")):
                 self.updateFound.emit()
 
             start = time.time()
@@ -120,7 +130,10 @@ if __name__ == "__main__":
     from argparse import ArgumentParser
 
     parser = ArgumentParser(
-        f"pyisotools v{__version__}", description="ISO tool for extracting/building Gamecube ISOs", allow_abbrev=False)
+        f"pyisotools v{__version__}",
+        description="ISO tool for extracting/building Gamecube ISOs",
+        allow_abbrev=False,
+    )
 
     parser.add_argument("owner")
     parser.add_argument("repository")

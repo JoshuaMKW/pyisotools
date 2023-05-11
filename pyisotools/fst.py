@@ -21,12 +21,18 @@ class InvalidFSTError(Exception):
     ...
 
 
-class FSTNode():
-
+class FSTNode:
     FILE = 0
     FOLDER = 1
 
-    def __init__(self, name: str, nodetype: int = None, nodeid: int = 0, parent: FSTNode = None, children: tuple = ()):
+    def __init__(
+        self,
+        name: str,
+        nodetype: int = None,
+        nodeid: int = 0,
+        parent: FSTNode = None,
+        children: tuple = (),
+    ):
         """
         Initialize a new FSTNode object, and set the parent and children according to the optional args :parentnode: and :children:
 
@@ -67,12 +73,16 @@ class FSTNode():
         if self.is_dir():
             info = f"Parent: {self._parent}, Children: {self.size}"
         else:
-            info = f"Offset: {self._fileoffset}, Size: {self.size}, Parent: {self._parent}"
+            info = (
+                f"Offset: {self._fileoffset}, Size: {self.size}, Parent: {self._parent}"
+            )
 
         return f"{self.__class__.__name__}<Type: {self.type}, {info}>"
 
     @classmethod
-    def file(cls, name: str, parent: FSTNode = None, size: int = None, offset: int = None):
+    def file(
+        cls, name: str, parent: FSTNode = None, size: int = None, offset: int = None
+    ):
         node = cls(name, FSTNode.FILE, parent=parent)
         node._filesize = size
         node._fileoffset = offset
@@ -87,11 +97,13 @@ class FSTNode():
         if path.is_file():
             node = cls.file(path.name, size=path.stat().st_size())
         elif path.is_dir():
-            node = cls.folder(path.name, children=[
-                              cls.from_path(f) for f in path.iterdir()])
+            node = cls.folder(
+                path.name, children=[cls.from_path(f) for f in path.iterdir()]
+            )
         else:
             raise NotImplementedError(
-                "Initializing a node using anything other than a file or folder is not allowed")
+                "Initializing a node using anything other than a file or folder is not allowed"
+            )
         return node
 
     @classmethod
@@ -199,7 +211,12 @@ class FSTNode():
         size = sum((node.size for node in self.rfiles(includedOnly=True)))
         return size
 
-    def find_by_path(self, path: Union[Path, str], skipExcluded: bool = True) -> FSTNode:
+    def find_by_path(
+        self, path: Union[Path, str], skipExcluded: bool = True
+    ) -> FSTNode:
+        if isinstance(path, str):
+            path = Path(path)
+
         _path = path.as_posix().lower()
         doGlob = "?" in _path or "*" in _path
 
@@ -239,7 +256,9 @@ class FSTNode():
         return self.type == FSTNode.FILE
 
     def is_root(self) -> bool:
-        return self.type == FSTNode.FOLDER and self.name == "files" and self.parent is None
+        return (
+            self.type == FSTNode.FOLDER and self.name == "files" and self.parent is None
+        )
 
     def __eq__(self, other: FSTNode) -> bool:
         return self.name == other.name and self.type == other.type
@@ -310,7 +329,6 @@ class FSTRoot(FSTNode):
 
 
 class FST(FSTRoot):
-
     @property
     def strTableOfs(self) -> int:
         return len(self) * 0xC
@@ -318,19 +336,22 @@ class FST(FSTRoot):
     def print_info(self):
         def print_tree(node: FSTNode, string: str, depth: int) -> str:
             if node.is_file():
-                string += "  "*depth + node.name + "\n"
+                string += "  " * depth + node.name + "\n"
             else:
-                string += "  "*depth + \
-                    f"{node.name} ({node._dirparent}, {node._dirnext})\n" + \
-                    "  "*depth + "{\n"
+                string += (
+                    "  " * depth
+                    + f"{node.name} ({node._dirparent}, {node._dirnext})\n"
+                    + "  " * depth
+                    + "{\n"
+                )
                 for child in node.children:
                     string = print_tree(child, string, depth + 1)
-                string += "  "*depth + "}\n"
+                string += "  " * depth + "}\n"
 
             return string
 
         print(self)
-        print("-"*32)
+        print("-" * 32)
 
         string = ""
         for child in self.children:
