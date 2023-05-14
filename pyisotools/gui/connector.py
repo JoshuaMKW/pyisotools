@@ -575,6 +575,8 @@ class Controller(QMainWindow):
             return False
 
         self.extractPath = Path(dialog.selectedFiles()[0]).resolve()
+
+        # Apply any changes before extracting
         self.save_all()
 
         self.iso.extract(self.extractPath, dumpPositions)
