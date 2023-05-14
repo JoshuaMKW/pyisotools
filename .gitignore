@@ -143,3 +143,4 @@ build.py
 
 # pyinstaller
 pyinstaller*
+.vscode/launch.json

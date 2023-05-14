@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 import functools
 import pickle
 import subprocess
 import sys
 import threading
-import time
 import traceback
 from enum import Enum, IntEnum
 from fnmatch import fnmatch
@@ -16,7 +14,6 @@ from types import TracebackType
 from typing import Callable, Dict, Iterable, Tuple, Union
 
 from PIL import Image, ImageQt
-from pyisotools.gui.mainwindow import Ui_MainWindow
 from PySide6.QtCore import QEvent, Qt, QThread
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtWidgets import (
@@ -24,23 +21,22 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QSizePolicy,
-    QTextEdit,
-    QLabel,
     QMainWindow,
     QMenu,
     QMessageBox,
 )
 
-from .. import __version__
-from ..bi2 import BI2
-from ..bnrparser import BNR
-from ..iso import FSTNode, GamecubeISO, WiiISO
-from .customwidgets import FSTTreeItem
-from .flagthread import FlagThread
-from .nodewindow import NodeFieldAlignmentDialog, NodeFieldPositionDialog
-from .updater import GitUpdateScraper
-from .updatewindow import Ui_UpdateDialog
-from .workpathing import get_program_folder, resource_path
+from pyisotools import __version__
+from pyisotools.bi2 import BI2
+from pyisotools.bnrparser import BNR
+from pyisotools.iso import FSTNode, GamecubeISO, WiiISO
+from pyisotools.gui.customwidgets import FSTTreeItem
+from pyisotools.gui.flagthread import FlagThread
+from pyisotools.gui.mainwindow import Ui_MainWindow
+from pyisotools.gui.nodewindow import NodeFieldAlignmentDialog, NodeFieldPositionDialog
+from pyisotools.gui.updater import GitUpdateScraper
+from pyisotools.gui.updatewindow import Ui_UpdateDialog
+from pyisotools.gui.workpathing import get_program_folder, resource_path
 
 
 class ProgramState:
@@ -1068,6 +1064,7 @@ class Controller(QMainWindow):
         _boot = self.iso.bootheader
         _appldr = self.iso.apploader
 
+        debugText = self.ui.isoNameTextBox.toPlainText()
         _boot.gameName = self.ui.isoNameTextBox.toPlainText()
         _boot.gameCode = self.ui.isoGameCodeTextBox.toPlainText()
         _boot.makerCode = self.ui.isoMakerCodeTextBox.toPlainText()

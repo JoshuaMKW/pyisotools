@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from pyisotools.iohelper import (read_string, read_ubyte, read_uint32,
-                                 write_ubyte, write_uint32)
+from pyisotools.iohelper import (
+    read_string,
+    read_ubyte,
+    read_uint32,
+    write_ubyte,
+    write_uint32,
+)
 
 
-class Boot():
-
+class Boot:
     class Country:
         JAPAN = 0
         AMERICA = 1
@@ -113,7 +117,7 @@ class Boot():
     @gameName.setter
     def gameName(self, name: str):
         self._rawdata.seek(0x20)
-        self._rawdata.write(name[:0x3E0].encode("ascii"))
+        self._rawdata.write(name[:0x3DF].encode("ascii") + b"\x00")
 
     @property
     def debugMonitorOffset(self) -> int:

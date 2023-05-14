@@ -5,15 +5,12 @@ from logging import StreamHandler
 from typing import Iterable, List, Optional
 
 from github import Github
+from github.GithubException import RateLimitExceededException
 from github.GitRelease import GitRelease
 from PySide6.QtCore import Signal
 
-try:
-    from .. import __version__
-    from .flagthread import FlagThread
-except ImportError:
-    from pyisotools import __version__
-    from pyisotools.gui.flagthread import FlagThread
+from pyisotools import __version__
+from pyisotools.gui.flagthread import FlagThread
 
 
 class ReleaseManager:
@@ -81,9 +78,13 @@ class ReleaseManager:
 
     def populate(self) -> bool:
         g = Github()
-        repo = g.get_repo(f"{self.owner}/{self.repository}")
-        self._releases = repo.get_releases()
-        return True
+        try:
+            repo = g.get_repo(f"{self.owner}/{self.repository}")
+            self._releases = repo.get_releases()
+            return True
+        except RateLimitExceededException:
+            print("Rate limit exceeded, waiting 2 hours...")
+            return False
 
     def view(
         self,
