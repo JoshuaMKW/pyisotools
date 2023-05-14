@@ -822,8 +822,6 @@ class Controller(QMainWindow):
         bnr.developerTitle = self.ui.bannerLongMakerTextBox.toPlainText()
         bnr.gameDescription = self.ui.bannerDescTextBox.toPlainText()
 
-        self.iso.bnr
-
         if self._fromIso:
             bnrNode = None
             for child in self.iso.rchildren():
