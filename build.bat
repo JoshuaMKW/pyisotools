@@ -1,2 +1,2 @@
 python -m build
-pyisotools
+.\dist\pyisotools.exe

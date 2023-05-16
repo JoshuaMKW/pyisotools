@@ -16,7 +16,8 @@ if sys.platform == "win32":
         "--clean",
         "--add-data",
         "pyisotools/gui/themes;themes/",
-        "pyisotools/__main__.py" "--windowed",
+        "pyisotools/__main__.py",
+        "--windowed",
     )
 else:
     callArgs = (
