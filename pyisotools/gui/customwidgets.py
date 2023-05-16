@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from PySide6.QtCore import Qt, QRegularExpression, Signal
+from PySide6.QtCore import Qt, QRegularExpression, Signal, QFileSystemWatcher
 from PySide6.QtGui import (QKeyEvent, QKeySequence, QIntValidator,
                            QTextOption)
-from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem, QLineEdit
+from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTreeWidgetItem, QLineEdit, QTreeWidget
 
 from pyisotools.fst import FSTNode
 

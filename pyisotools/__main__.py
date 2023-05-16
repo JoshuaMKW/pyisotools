@@ -1,5 +1,6 @@
 import sys
 
+from argparse import ArgumentParser
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -10,7 +11,6 @@ from pyisotools import __version__
 from pyisotools.gui.mainwindow import Ui_MainWindow
 from pyisotools.gui.connector import Controller
 from pyisotools.iso import GamecubeISO
-
 
 def main(argv: Optional[Tuple] = None):
     if argv is None:
@@ -35,7 +35,6 @@ def main(argv: Optional[Tuple] = None):
         mainWindow.show()
         sys.exit(app.exec())
     else:
-        from argparse import ArgumentParser
 
         parser = ArgumentParser(
             f"pyisotools v{__version__}", description="ISO tool for extracting/building Gamecube ISOs", allow_abbrev=False)

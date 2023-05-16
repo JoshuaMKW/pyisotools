@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/img">
+        <file>exit.ico</file>
+    </qresource>
+</RCC>

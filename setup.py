@@ -19,6 +19,16 @@ setuptools.setup(
     license='GNU General Public License v3.0',
     packages=setuptools.find_packages(),
     include_package_data=True,
+    # install_requires=[
+    #     "bs4",
+    #     "chardet",
+    #     "dolreader",
+    #     "qdarkstyle",
+    #     "sortedcontainers",
+    #     "pillow",
+    #     "pygithub",
+    #     "PySide6"
+    # ],
     install_requires=requires,
 
     classifiers=[

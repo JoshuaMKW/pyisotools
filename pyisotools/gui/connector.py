@@ -22,6 +22,8 @@ from PySide6.QtGui import QIcon, QAction
 from PySide6.QtWidgets import (QDialog, QFileDialog, QFrame, QSizePolicy, QTextEdit, QLabel,
                                QMainWindow, QMenu, QMessageBox)
 
+from pyisotools.gui.models.rarcfs import JSystemFSModel
+
 from .. import __version__
 from ..bi2 import BI2
 from ..bnrparser import BNR
@@ -972,16 +974,8 @@ class Controller(QMainWindow):
         self.setWindowTitle(self.get_window_title())
 
     def load_file_system(self):
-        rootNode = FSTTreeItem()
-        rootNode.setIcon(0, QIcon(u":/icons/Disc"))
-        rootNode.setText(0, "root")
-        rootNode.node = self.iso
-        self._load_fst_tree(rootNode, self.iso)
-
-        self.ui.fileSystemTreeWidget.takeTopLevelItem(0)
-        self.ui.fileSystemTreeWidget.addTopLevelItem(rootNode)
-
-        self.ui.fileSystemTreeWidget.sortItems(0, Qt.SortOrder.AscendingOrder)
+        model: JSystemFSModel = self.ui.fileSystemTreeWidget.model()
+        model.rootPath = self.rootPath
 
     # pylint: disable=no-member
     def file_system_context_menu(self, point):

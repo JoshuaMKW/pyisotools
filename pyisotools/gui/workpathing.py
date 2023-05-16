@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from os import getenv
 
 
 def resource_path(relPath: str = "") -> Path:
@@ -9,16 +10,15 @@ def resource_path(relPath: str = "") -> Path:
     else:
         if getattr(sys, "frozen", False):
             # The application is frozen
-            base_path = Path(sys.executable).parent
+            basePath = Path(sys.executable).parent
         else:
-            base_path = Path(__file__).parent
+            basePath = Path(__file__).parent
 
-        return base_path / relPath
+        return basePath / relPath
 
 
 def get_program_folder(folder: str = "") -> Path:
     """ Get path to appdata """
-    from os import getenv
 
     if sys.platform == "win32":
         datapath = Path(getenv("APPDATA")) / folder

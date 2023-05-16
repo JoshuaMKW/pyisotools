@@ -14,6 +14,9 @@ from PySide6.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
 from PySide6.QtGui import QFont, QIcon, QAction
 from PySide6.QtWidgets import *
 
+from pyisotools.gui.fsviewer import ProjectTreeViewWidget
+from pyisotools.gui.models.rarcfs import JSystemFSModel
+
 from . import icons_rc
 from .customwidgets import FilteredPlainTextEdit
 
@@ -81,10 +84,9 @@ class Ui_MainWindow():
         font = QFont()
         font.setPointSize(10)
         self.fileSystemGroupBox.setFont(font)
-        self.fileSystemTreeWidget = QTreeWidget(self.fileSystemGroupBox)
-        __qtreewidgetitem = QTreeWidgetItem()
-        __qtreewidgetitem.setText(0, u"1")
-        self.fileSystemTreeWidget.setHeaderItem(__qtreewidgetitem)
+        self.fileSystemTreeWidget = ProjectTreeViewWidget(
+            self.fileSystemGroupBox)
+        self.fileSystemTreeWidget.setModel(JSystemFSModel(None))
         self.fileSystemTreeWidget.setObjectName(u"fileSystemTreeWidget")
         self.fileSystemTreeWidget.setGeometry(QRect(10, 20, 341, 431))
         font1 = QFont()
@@ -494,8 +496,8 @@ class Ui_MainWindow():
         self.actionOpenISO.triggered.connect(MainWindow.iso_load_iso_dialog)
         self.fileSystemTreeWidget.customContextMenuRequested.connect(
             MainWindow.file_system_context_menu)
-        self.fileSystemTreeWidget.itemClicked.connect(
-            MainWindow.file_system_set_fields)
+        # self.fileSystemTreeWidget.itemClicked.connect(
+        #     MainWindow.file_system_set_fields)
         self.actionSave.triggered.connect(MainWindow.save_all_wrapped)
         self.actionDarkTheme.toggled.connect(MainWindow.update_dark)
 
