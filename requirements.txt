@@ -7,3 +7,5 @@ pillow
 pygithub
 PySide6
 pyinstaller
+pylint
+setuptools

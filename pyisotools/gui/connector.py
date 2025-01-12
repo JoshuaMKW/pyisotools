@@ -730,9 +730,9 @@ class Controller(QMainWindow):
             for p in self.rootPath.rglob("*.bnr"):
                 if p.is_file():
                     with p.open("rb") as pp:
-                        self.bnrMap[
-                            p.relative_to(self.rootPath / "files")
-                        ] = BNR.from_data(pp, size=p.stat().st_size)
+                        self.bnrMap[p.relative_to(self.rootPath / "files")] = (
+                            BNR.from_data(pp, size=p.stat().st_size)
+                        )
 
         self.ui.bannerComboBox.clear()
         self.ui.bannerComboBox.addItems(
@@ -863,7 +863,7 @@ class Controller(QMainWindow):
                 "\n\n",
                 "Please see the readme for more details.",
                 "\n\n",
-                "Copyright © 2023; All rights reserved.",
+                "Copyright © 2025; All rights reserved.",
                 "\n\n",
                 "JoshuaMK <joshuamkw2002@gmail.com>",
                 "\n\n",
@@ -886,6 +886,13 @@ class Controller(QMainWindow):
                 "\n\n",
                 "Valid alignments:\n",
                 "4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768",
+                "\n\n",
+                "Note: There are recommended alignments for certain applications.\n",
+                "For example, some games use streamed audio files (.adp) that require\n",
+                "a 32768 alignment to adhere with the DVD streaming hardware.\n\n",
+                "Still, other games are finniky and require 32 byte alignment\n",
+                "of all files to work properly.\n\n",
+                "File alignment is your friend; don't be afraid to experiment!",
             ]
         )
 
@@ -902,6 +909,17 @@ class Controller(QMainWindow):
                 "to set the internal ISO position of that node.",
                 "\n\n",
                 "Default position: -1",
+                "\n\n",
+                "This is a useful tool for exotic DVD optimizations.\n",
+                "Files with a smaller/lower position are placed closer to\n",
+                "the center of the DVD, while files with a larger/higher\n",
+                "position are placed closer to the edge of the DVD.\n",
+                "Since the outer edge of the DVD has a higher read speed,\n",
+                "place lower priority (and smaller) files closer to the center\n",
+                "by using a lower position, leaving room for larger files\n"
+                "to be automatic placed at the edge of the DVD.",
+                "\n\n",
+                "Note: This feature is for advanced modding only!\n",
             ]
         )
 
@@ -915,7 +933,7 @@ class Controller(QMainWindow):
         info = "".join(
             [
                 "When an extracted root is opened, you can right click on each node\n",
-                "to set if it (and all children) is excluded from the build process.",
+                "to set if it--and all its children--are excluded from the build process.",
             ]
         )
 
