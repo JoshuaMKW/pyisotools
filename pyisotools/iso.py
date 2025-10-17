@@ -866,7 +866,7 @@ class GamecubeISO(ISOBase):
         if ignoreList is None:
             ignoreList = []
 
-        self._init_tables(self.configPath)
+        self.load_config(self.configPath)
 
         if len(self._excludeTable) > 0:
             ignoreList.extend(self._excludeTable)
